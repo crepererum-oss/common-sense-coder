@@ -7,6 +7,7 @@ use lsp_types::{
     WindowClientCapabilities, WorkspaceClientCapabilities, WorkspaceFolder,
     WorkspaceSymbolClientCapabilities,
 };
+use serde_json::json;
 use tracing::info;
 
 pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()> {
@@ -51,6 +52,15 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
                 name: env!("CARGO_PKG_NAME").to_owned(),
                 version: Some(env!("CARGO_PKG_VERSION").to_owned()),
             }),
+            initialization_options: Some(json!({
+                "workspace": {
+                    "symbol": {
+                        "search": {
+                            "scope": "workspace_and_dependencies",
+                        },
+                    },
+                },
+            })),
             workspace_folders: Some(vec![WorkspaceFolder {
                 uri: format!("file://{}", workspace.display())
                     .parse()

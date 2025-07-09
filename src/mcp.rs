@@ -20,7 +20,6 @@ use rmcp::{
     },
     schemars, tool, tool_handler, tool_router,
 };
-use tracing::debug;
 
 use crate::ProgressGuard;
 
@@ -54,13 +53,18 @@ impl CodeExplorer {
     ) -> Result<CallToolResult, McpError> {
         self.progress_guard.wait().await;
 
+        // prefix relative paths with workspace
+        let path = if path.starts_with("/") {
+            path
+        } else {
+            format!("{}/path", self.workspace.display())
+        };
+
         let resp = self
             .client
             .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
                 text_document: TextDocumentIdentifier {
-                    uri: format!("file://{}/{path}", self.workspace.display())
-                        .parse()
-                        .internal()?,
+                    uri: format!("file://{path}").parse().internal()?,
                 },
                 work_done_progress_params: Default::default(),
                 partial_result_params: Default::default(),
@@ -99,12 +103,18 @@ impl CodeExplorer {
             })
             .await
             .internal()?
-            .not_found(query)?;
+            .not_found(query.clone())?;
 
         let response = match resp {
-            WorkspaceSymbolResponse::Flat(symbol_informations) => {
-                SymbolResult::si_vec_to_content(symbol_informations, &self.workspace)?
-            }
+            WorkspaceSymbolResponse::Flat(symbol_informations) => SymbolResult::si_vec_to_content(
+                symbol_informations
+                    .into_iter()
+                    // rust-analyzer search is fuzzy and rather unhelpful, so bring it back to something sane
+                    // TODO: make this a parameter
+                    .filter(|si| si.name == query)
+                    .collect(),
+                &self.workspace,
+            )?,
             WorkspaceSymbolResponse::Nested(_) => {
                 return Err(McpError::internal_error(
                     "nested symbols are not yet implemented",
@@ -139,7 +149,7 @@ struct SymbolResult {
 }
 
 impl SymbolResult {
-    fn try_new(si: SymbolInformation, workspace: &Path) -> Result<Option<Self>, McpError> {
+    fn try_new(si: SymbolInformation, workspace: &Path) -> Result<Self, McpError> {
         let SymbolInformation {
             name,
             kind,
@@ -161,37 +171,24 @@ impl SymbolResult {
                 .context("parse URI as path")
                 .internal()?;
 
-            match path.strip_prefix(workspace) {
-                Ok(path) => path.display().to_string(),
-                Err(_) => {
-                    debug!(path = %path.display(), "skip path outside workspace");
-                    return Ok(None);
-                }
-            }
+            // try to make it relative to the workspace root
+            path.strip_prefix(workspace)
+                .unwrap_or(&path)
+                .display()
+                .to_string()
         } else {
             path.to_string()
         };
 
         let line = location.range.start.line + 1;
 
-        Ok(Some(SymbolResult {
+        Ok(SymbolResult {
             name,
             kind,
             deprecated,
             file,
             line,
-        }))
-    }
-
-    fn try_new_content(
-        si: SymbolInformation,
-        workspace: &Path,
-    ) -> Result<Option<Annotated<RawContent>>, McpError> {
-        match Self::try_new(si, workspace) {
-            Ok(Some(sr)) => Ok(Some(Content::json(sr)?)),
-            Ok(None) => Ok(None),
-            Err(e) => Err(e),
-        }
+        })
     }
 
     fn si_vec_to_content(
@@ -200,8 +197,7 @@ impl SymbolResult {
     ) -> Result<Vec<Annotated<RawContent>>, McpError> {
         symbol_informations
             .into_iter()
-            .map(|si| Self::try_new_content(si, workspace))
-            .filter_map(Result::transpose)
+            .map(|si| Self::try_new(si, workspace).and_then(Content::json))
             .collect::<Result<Vec<_>, McpError>>()
     }
 }

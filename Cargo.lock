@@ -585,6 +585,7 @@ dependencies = [
  "lsp-types",
  "rmcp",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-log",
