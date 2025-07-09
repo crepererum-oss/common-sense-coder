@@ -1,16 +1,13 @@
-use std::{
-    path::{Path, PathBuf},
-    process::Stdio,
-    sync::Arc,
-};
+use std::{path::PathBuf, process::Stdio, sync::Arc};
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use init::init_lsp;
 use logging::{LoggingCLIConfig, setup_logging};
 use lsp_client::{LspClient, transport::io_transport};
-use lsp_types::{WorkspaceSymbolParams, request::WorkspaceSymbolRequest};
+use mcp::CodeExplorer;
 use progress_guard::ProgressGuard;
+use rmcp::{ServiceExt, transport::stdio};
 use tokio::{
     process::Command,
     task::{JoinError, JoinSet},
@@ -19,6 +16,7 @@ use tracing::{info, warn};
 
 mod init;
 mod logging;
+mod mcp;
 mod progress_guard;
 
 #[derive(Debug, Parser)]
@@ -35,6 +33,11 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
     setup_logging(args.logging_cfg).context("logging setup")?;
+
+    let workspace = args
+        .workspace
+        .canonicalize()
+        .context("canonicalize workspace path")?;
 
     // TODO: stderr to log file
     let mut child = Command::new("rust-analyzer")
@@ -55,7 +58,7 @@ async fn main() -> Result<()> {
     let progress_guard = ProgressGuard::start(&mut tasks, Arc::clone(&client));
 
     let mut res = tokio::select! {
-        res = main_inner(client, progress_guard, &args.workspace) => {
+        res = main_inner(client, progress_guard, workspace) => {
             res.context("main")
         }
         res = tasks.join_next(), if !tasks.is_empty() => {
@@ -88,21 +91,17 @@ async fn main() -> Result<()> {
 async fn main_inner(
     client: Arc<LspClient>,
     progress_guard: ProgressGuard,
-    workspace: &Path,
+    workspace: PathBuf,
 ) -> Result<()> {
-    init_lsp(&client, &progress_guard, workspace)
+    init_lsp(&client, &progress_guard, &workspace)
         .await
         .context("init lsp")?;
 
-    dbg!(
-        client
-            .send_request::<WorkspaceSymbolRequest>(WorkspaceSymbolParams {
-                query: "ProgressGuard".to_owned(),
-                ..Default::default()
-            })
-            .await
-            .unwrap()
-    );
+    let service = CodeExplorer::new(client, progress_guard, workspace)
+        .serve(stdio())
+        .await
+        .context("set up code explorer service")?;
+    service.waiting().await?;
 
     Ok(())
 }

@@ -45,7 +45,7 @@ pub(crate) async fn init_lsp(
                 version: Some(env!("CARGO_PKG_VERSION").to_owned()),
             }),
             workspace_folders: Some(vec![WorkspaceFolder {
-                uri: format!("file://{}", workspace.canonicalize().unwrap().display())
+                uri: format!("file://{}", workspace.display())
                     .parse()
                     .context("cannot parse workspace URI")?,
                 name: "root".to_owned(),
