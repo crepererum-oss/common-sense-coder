@@ -2,4 +2,5 @@
 
 set -euo pipefail
 
+export DANGEROUSLY_OMIT_AUTH=true
 exec npx @modelcontextprotocol/inspector
