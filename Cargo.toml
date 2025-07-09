@@ -1,0 +1,14 @@
+[package]
+name = "mcp-lsp-bridge"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.98"
+clap = { version = "4.5.40", features = ["derive"] }
+lsp-client = "0.1.0"
+lsp-types = "0.97.0"
+tokio = { version = "1.46.1", features = ["macros", "process", "rt-multi-thread"] }
+tracing = "0.1.41"
+tracing-log = "0.2.0"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }

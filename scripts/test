@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+export cargo_dir="$(realpath "$(dirname "$0")")/.."
+cd "$cargo_dir"
+
+export RUST_BACKTRACE=1
+# export RA_LOG=info
+exec cargo run -- --workspace="." -vv
