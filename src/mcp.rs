@@ -12,6 +12,7 @@ use rmcp::{
     model::{CallToolResult, Content, ErrorData as McpError, ServerCapabilities, ServerInfo},
     schemars, tool, tool_handler, tool_router,
 };
+use tracing::debug;
 
 use crate::ProgressGuard;
 
@@ -76,29 +77,33 @@ impl CodeExplorer {
 
                     let path = location.uri.path();
                     let file = if path.is_absolute() {
-                        PathBuf::from_str(path.as_str())
+                        let path = PathBuf::from_str(path.as_str())
                             .context("parse URI as path")
-                            .internal()?
-                            .strip_prefix(&self.workspace)
-                            .context("make path relative")
-                            .internal()?
-                            .display()
-                            .to_string()
+                            .internal()?;
+
+                        match path.strip_prefix(&self.workspace) {
+                            Ok(path) => path.display().to_string(),
+                            Err(_) => {
+                                debug!(path = %path.display(), "skip path outside workspace");
+                                return Ok(None);
+                            }
+                        }
                     } else {
                         path.to_string()
                     };
 
                     let line = location.range.start.line + 1;
 
-                    let res = FindSymbolResult {
+                    let content = Content::json(FindSymbolResult {
                         name,
                         kind,
                         deprecated,
                         file,
                         line,
-                    };
-                    Content::json(res)
+                    })?;
+                    Ok(Some(content))
                 })
+                .filter_map(Result::transpose)
                 .collect::<Result<Vec<_>, McpError>>()?,
             WorkspaceSymbolResponse::Nested(_) => {
                 return Err(McpError::internal_error(
