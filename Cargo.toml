@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.98"
 clap = { version = "4.5.40", features = ["derive"] }
+futures = "0.3.31"
 lsp-client = "0.1.0"
 lsp-types = "0.97.0"
 rmcp = { version = "0.2.1", features = ["macros", "transport-io"] }

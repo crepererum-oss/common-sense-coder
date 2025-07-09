@@ -93,9 +93,7 @@ async fn main_inner(
     progress_guard: ProgressGuard,
     workspace: PathBuf,
 ) -> Result<()> {
-    init_lsp(&client, &progress_guard, &workspace)
-        .await
-        .context("init lsp")?;
+    init_lsp(&client, &workspace).await.context("init lsp")?;
 
     let service = CodeExplorer::new(client, progress_guard, workspace)
         .serve(stdio())

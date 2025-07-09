@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use lsp_client::LspClient;
@@ -12,13 +12,30 @@ use tracing::debug;
 /// Allows to wait for in-progress language server tasks.
 #[derive(Debug, Clone)]
 pub(crate) struct ProgressGuard {
-    rx: Receiver<bool>,
+    rx: Receiver<Ready>,
 }
 
 impl ProgressGuard {
     /// Start guard.
     pub(crate) fn start(tasks: &mut JoinSet<Result<()>>, client: Arc<LspClient>) -> Self {
-        let (tx, rx) = channel(true);
+        let (tx, rx) = channel(Ready {
+            init: false,
+            progress: true,
+        });
+
+        // HACK: there doesn't seem to be a way to know what progress tokens
+        // to expect initially, so we just give the language server some time to hit us with a few
+        let tx_captured = tx.clone();
+        tasks.spawn(async move {
+            debug!("wait for initial language server warm-up");
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            tx_captured.send_modify(|rdy| rdy.init = true);
+            debug!("wait for initial language server warm-up");
+
+            // never return
+            futures::future::pending::<()>().await;
+            Ok(())
+        });
 
         tasks.spawn(async move {
             let mut subscription = client
@@ -54,8 +71,8 @@ impl ProgressGuard {
 
                 let new_ready = running.is_empty();
                 tx.send_if_modified(|rdy| {
-                    if *rdy != new_ready {
-                        *rdy = new_ready;
+                    if rdy.progress != new_ready {
+                        rdy.progress = new_ready;
                         debug!(ready=new_ready, "ready change");
                         true
                     } else {
@@ -73,6 +90,19 @@ impl ProgressGuard {
     /// Wait for all outstanding tasks.
     pub(crate) async fn wait(&self) {
         // accept errors during shutdown
-        self.rx.clone().wait_for(|rdy| *rdy).await.ok();
+        self.rx.clone().wait_for(|rdy| rdy.ready()).await.ok();
+    }
+}
+
+#[derive(Debug)]
+struct Ready {
+    init: bool,
+    progress: bool,
+}
+
+impl Ready {
+    fn ready(&self) -> bool {
+        let Self { init, progress } = self;
+        *init && *progress
     }
 }

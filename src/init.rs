@@ -1,6 +1,5 @@
-use std::{path::Path, time::Duration};
+use std::path::Path;
 
-use crate::progress_guard::ProgressGuard;
 use anyhow::{Context, Result};
 use lsp_client::LspClient;
 use lsp_types::{
@@ -10,11 +9,7 @@ use lsp_types::{
 };
 use tracing::info;
 
-pub(crate) async fn init_lsp(
-    client: &LspClient,
-    progress_guard: &ProgressGuard,
-    workspace: &Path,
-) -> Result<()> {
+pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()> {
     info!("init LSP");
 
     client
@@ -55,11 +50,6 @@ pub(crate) async fn init_lsp(
         .await
         .context("initialize language server")?;
     client.initialized().await.context("set init response")?;
-
-    // HACK: there doesn't seem to be a way to know what progress tokens
-    // to expect initially, so we just give the language server some time to hit us with a few
-    tokio::time::sleep(Duration::from_secs(2)).await;
-    progress_guard.wait().await;
 
     info!("LSP initialized");
 

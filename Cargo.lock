@@ -580,6 +580,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "futures",
  "lsp-client",
  "lsp-types",
  "rmcp",
