@@ -19,10 +19,22 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
                     workspace_folders: Some(true),
                     symbol: Some(WorkspaceSymbolClientCapabilities {
                         symbol_kind: Some(SymbolKindCapability {
+                            // roughly based on
+                            // https://github.com/rust-lang/rust-analyzer/blob/e429bac8793c24a99b643c4813ece813901c8c79/crates/rust-analyzer/src/lsp/to_proto.rs#L125-L179
                             value_set: Some(vec![
-                                SymbolKind::CLASS,
+                                SymbolKind::CONSTANT,
+                                SymbolKind::ENUM,
+                                SymbolKind::ENUM_MEMBER,
+                                SymbolKind::FIELD,
                                 SymbolKind::FUNCTION,
+                                SymbolKind::INTERFACE,
+                                SymbolKind::METHOD,
+                                SymbolKind::MODULE,
+                                SymbolKind::NAMESPACE,
+                                SymbolKind::OBJECT,
                                 SymbolKind::STRUCT,
+                                SymbolKind::TYPE_PARAMETER,
+                                SymbolKind::VARIABLE,
                             ]),
                         }),
                         ..Default::default()
