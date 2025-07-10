@@ -8,9 +8,10 @@ use anyhow::Context;
 use error::{OptionExt, ResultExt};
 use lsp_client::LspClient;
 use lsp_types::{
-    DocumentSymbolParams, DocumentSymbolResponse, SymbolInformation, SymbolTag,
-    TextDocumentIdentifier, WorkspaceSymbolParams, WorkspaceSymbolResponse,
-    request::{DocumentSymbolRequest, WorkspaceSymbolRequest},
+    DocumentSymbolParams, DocumentSymbolResponse, HoverContents, HoverParams, LanguageString,
+    MarkedString, Position, SymbolInformation, SymbolTag, TextDocumentIdentifier,
+    TextDocumentPositionParams, Uri, WorkspaceSymbolParams, WorkspaceSymbolResponse,
+    request::{DocumentSymbolRequest, HoverRequest, WorkspaceSymbolRequest},
 };
 use rmcp::{
     ServerHandler,
@@ -49,6 +50,17 @@ impl CodeExplorer {
         }
     }
 
+    fn path_to_uri(&self, path: &str) -> Result<Uri, McpError> {
+        // prefix relative paths with workspace
+        let path = if path.starts_with("/") {
+            path
+        } else {
+            &format!("{}/{path}", self.workspace.display())
+        };
+
+        format!("file://{path}").parse().internal()
+    }
+
     #[tool(description = "list all symbols in a given file")]
     async fn file_symbols(
         &self,
@@ -56,18 +68,11 @@ impl CodeExplorer {
     ) -> Result<CallToolResult, McpError> {
         self.progress_guard.wait().await;
 
-        // prefix relative paths with workspace
-        let path = if path.starts_with("/") {
-            path
-        } else {
-            format!("{}/path", self.workspace.display())
-        };
-
         let resp = self
             .client
             .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
                 text_document: TextDocumentIdentifier {
-                    uri: format!("file://{path}").parse().internal()?,
+                    uri: self.path_to_uri(&path)?,
                 },
                 work_done_progress_params: Default::default(),
                 partial_result_params: Default::default(),
@@ -128,6 +133,50 @@ impl CodeExplorer {
 
         Ok(CallToolResult::success(response))
     }
+
+    #[tool(description = "get information to given symbol")]
+    async fn symbol_info(
+        &self,
+        Parameters(SymbolInfoRequest {
+            path,
+            line,
+            character,
+        }): Parameters<SymbolInfoRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        self.progress_guard.wait().await;
+
+        let uri = self.path_to_uri(&path)?;
+
+        let resp = self
+            .client
+            .send_request::<HoverRequest>(HoverParams {
+                text_document_position_params: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri },
+                    position: Position {
+                        line: line - 1,
+                        character: character - 1,
+                    },
+                },
+                work_done_progress_params: Default::default(),
+            })
+            .await
+            .internal()?
+            .not_found(format!("{path}:{line}:{character}"))?;
+
+        let res = match resp.contents {
+            HoverContents::Scalar(markup_string) => {
+                vec![Content::text(format_marked_string(markup_string))]
+            }
+            HoverContents::Array(marked_strings) => marked_strings
+                .into_iter()
+                .map(format_marked_string)
+                .map(Content::text)
+                .collect(),
+            HoverContents::Markup(markup_content) => vec![Content::text(markup_content.value)],
+        };
+
+        Ok(CallToolResult::success(res))
+    }
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -149,6 +198,7 @@ struct SymbolResult {
     deprecated: bool,
     file: String,
     line: u32,
+    character: u32,
 }
 
 impl SymbolResult {
@@ -183,7 +233,9 @@ impl SymbolResult {
             path.to_string()
         };
 
-        let line = location.range.start.line + 1;
+        let start = location.range.start;
+        let line = start.line + 1;
+        let character = start.character + 1;
 
         Ok(SymbolResult {
             name,
@@ -191,6 +243,7 @@ impl SymbolResult {
             deprecated,
             file,
             line,
+            character,
         })
     }
 
@@ -202,6 +255,30 @@ impl SymbolResult {
             .into_iter()
             .map(|si| Self::try_new(si, workspace).and_then(Content::json))
             .collect::<Result<Vec<_>, McpError>>()
+    }
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct SymbolInfoRequest {
+    #[schemars(description = "path to the file")]
+    path: String,
+
+    #[schemars(description = "1-based line number within the file", range(min = 1))]
+    line: u32,
+
+    #[schemars(
+        description = "1-based character index within the line",
+        range(min = 1)
+    )]
+    character: u32,
+}
+
+fn format_marked_string(s: MarkedString) -> String {
+    match s {
+        MarkedString::String(s) => s,
+        MarkedString::LanguageString(LanguageString { language, value }) => {
+            format!("```{language}\n{value}\n```\n")
+        }
     }
 }
 

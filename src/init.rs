@@ -3,9 +3,10 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use lsp_client::LspClient;
 use lsp_types::{
-    ClientCapabilities, ClientInfo, InitializeParams, SymbolKind, SymbolKindCapability,
-    TextDocumentClientCapabilities, TextDocumentSyncClientCapabilities, WindowClientCapabilities,
-    WorkspaceClientCapabilities, WorkspaceFolder, WorkspaceSymbolClientCapabilities,
+    ClientCapabilities, ClientInfo, HoverClientCapabilities, InitializeParams, MarkupKind,
+    SymbolKind, SymbolKindCapability, TextDocumentClientCapabilities,
+    TextDocumentSyncClientCapabilities, WindowClientCapabilities, WorkspaceClientCapabilities,
+    WorkspaceFolder, WorkspaceSymbolClientCapabilities,
 };
 use serde_json::json;
 use tracing::info;
@@ -17,6 +18,10 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
         .initialize(InitializeParams {
             capabilities: ClientCapabilities {
                 text_document: Some(TextDocumentClientCapabilities {
+                    hover: Some(HoverClientCapabilities {
+                        content_format: Some(vec![MarkupKind::Markdown]),
+                        dynamic_registration: Some(false),
+                    }),
                     synchronization: Some(TextDocumentSyncClientCapabilities {
                         did_save: Some(false),
                         dynamic_registration: Some(false),
@@ -64,6 +69,19 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
             initialization_options: Some(json!({
                 "files": {
                     "watcher": "server",
+                },
+                "hover": {
+                    "dropGlue": {
+                        "enable": false,
+                    },
+                    "memoryLayout": {
+                        "enable": false,
+                    },
+                    "show": {
+                        "enumVariants": 100,
+                        "fields": 100,
+                        "traitAssocItems": 100,
+                    },
                 },
                 "workspace": {
                     "symbol": {
