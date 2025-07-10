@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use lsp_client::LspClient;
 use lsp_types::{
     ClientCapabilities, ClientInfo, InitializeParams, SymbolKind, SymbolKindCapability,
-    WindowClientCapabilities, WorkspaceClientCapabilities, WorkspaceFolder,
-    WorkspaceSymbolClientCapabilities,
+    TextDocumentClientCapabilities, TextDocumentSyncClientCapabilities, WindowClientCapabilities,
+    WorkspaceClientCapabilities, WorkspaceFolder, WorkspaceSymbolClientCapabilities,
 };
 use serde_json::json;
 use tracing::info;
@@ -16,6 +16,15 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
     client
         .initialize(InitializeParams {
             capabilities: ClientCapabilities {
+                text_document: Some(TextDocumentClientCapabilities {
+                    synchronization: Some(TextDocumentSyncClientCapabilities {
+                        did_save: Some(false),
+                        dynamic_registration: Some(false),
+                        will_save: Some(false),
+                        will_save_wait_until: Some(false),
+                    }),
+                    ..Default::default()
+                }),
                 window: Some(WindowClientCapabilities {
                     work_done_progress: Some(true),
                     ..Default::default()
