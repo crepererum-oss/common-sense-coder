@@ -57,14 +57,12 @@ impl AsyncWrite for WriteFork {
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         self.inner.as_mut().poll_flush(cx).map_ok(|()| {
             self.tx.send(Message::Flush).ok();
-            ()
         })
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         self.inner.as_mut().poll_shutdown(cx).map_ok(|()| {
             self.tx.send(Message::Shutdown).ok();
-            ()
         })
     }
 }
@@ -103,7 +101,6 @@ impl AsyncRead for ReadFork {
             self.tx
                 .send(Message::Data(buf.initialized()[pos_pre..].to_owned()))
                 .ok();
-            ()
         })
     }
 }
