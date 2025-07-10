@@ -41,6 +41,9 @@ pub(crate) trait OptionExt {
 
     /// A value was expected, treat [`None`] as [not found](McpError::resource_not_found).
     fn not_found(self, what: String) -> Result<Self::T, McpError>;
+
+    /// A value is required.
+    fn required(self, what: String) -> Result<Self::T, McpError>;
 }
 
 impl<T> OptionExt for Option<T> {
@@ -48,5 +51,9 @@ impl<T> OptionExt for Option<T> {
 
     fn not_found(self, what: String) -> Result<Self::T, McpError> {
         self.ok_or_else(|| McpError::resource_not_found(what, None))
+    }
+
+    fn required(self, what: String) -> Result<Self::T, McpError> {
+        self.ok_or_else(|| McpError::invalid_request(format!("{what} is required"), None))
     }
 }

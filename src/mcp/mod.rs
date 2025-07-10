@@ -61,6 +61,9 @@ impl CodeExplorer {
     ) -> Result<CallToolResult, McpError> {
         let client = self.progress_guard.wait().await;
 
+        let query = empty_string_to_none(query);
+        let path = empty_string_to_none(path);
+
         let symbol_informations = match path {
             Some(path) => {
                 let resp = client
@@ -86,6 +89,7 @@ impl CodeExplorer {
                 }
             }
             None => {
+                let query = query.as_ref().required("query".to_string())?;
                 let resp = client
                     .send_request::<WorkspaceSymbolRequest>(WorkspaceSymbolParams {
                         query: query.clone(),
@@ -115,7 +119,12 @@ impl CodeExplorer {
         let response = symbol_informations
             .into_iter()
             // rust-analyzer search is fuzzy by default
-            .filter(|si| mode.check(&query, &si.name))
+            .filter(|si| {
+                query
+                    .as_deref()
+                    .map(|query| (mode.check(query, &si.name)))
+                    .unwrap_or(true)
+            })
             .map(|si| {
                 let SymbolInformation {
                     name,
@@ -225,8 +234,11 @@ impl CodeExplorer {
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 struct FindSymbolRequest {
-    #[schemars(description = "the symbol that you are looking for", length(min = 1))]
-    query: String,
+    #[schemars(
+        description = "the symbol that you are looking for, required if `path` is not provided",
+        length(min = 1)
+    )]
+    query: Option<String>,
 
     #[schemars(
         description = "path to the file, otherwise search the entire workspace",
@@ -273,6 +285,10 @@ fn format_marked_string(s: MarkedString) -> String {
             format!("```{language}\n{value}\n```\n")
         }
     }
+}
+
+fn empty_string_to_none(s: Option<String>) -> Option<String> {
+    s.and_then(|s| (!s.is_empty()).then_some(s))
 }
 
 #[tool_handler]
