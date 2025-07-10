@@ -1,8 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::Arc,
-};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use anyhow::Context;
 use error::{OptionExt, ResultExt};
@@ -16,16 +12,15 @@ use lsp_types::{
 use rmcp::{
     ServerHandler,
     handler::server::tool::{Parameters, ToolRouter},
-    model::{
-        Annotated, CallToolResult, Content, ErrorData as McpError, RawContent, ServerCapabilities,
-        ServerInfo,
-    },
+    model::{CallToolResult, Content, ErrorData as McpError, ServerCapabilities, ServerInfo},
     schemars, tool, tool_handler, tool_router,
 };
+use search::SearchMode;
 
 use crate::ProgressGuard;
 
 mod error;
+mod search;
 
 #[derive(Debug)]
 pub(crate) struct CodeExplorer {
@@ -61,75 +56,134 @@ impl CodeExplorer {
         format!("file://{path}").parse().internal()
     }
 
-    #[tool(description = "list all symbols in a given file")]
-    async fn file_symbols(
-        &self,
-        Parameters(FileSymbolRequest { path }): Parameters<FileSymbolRequest>,
-    ) -> Result<CallToolResult, McpError> {
-        self.progress_guard.wait().await;
-
-        let resp = self
-            .client
-            .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
-                text_document: TextDocumentIdentifier {
-                    uri: self.path_to_uri(&path)?,
-                },
-                work_done_progress_params: Default::default(),
-                partial_result_params: Default::default(),
-            })
-            .await
-            .internal()?
-            .not_found(path)?;
-
-        let response = match resp {
-            DocumentSymbolResponse::Flat(symbol_informations) => {
-                SymbolResult::si_vec_to_content(symbol_informations, &self.workspace)?
-            }
-            DocumentSymbolResponse::Nested(_) => {
-                return Err(McpError::internal_error(
-                    "nested symbols are not yet implemented",
-                    None,
-                ));
-            }
-        };
-
-        Ok(CallToolResult::success(response))
-    }
-
-    #[tool(description = "find symbol in code base")]
+    #[tool(description = "find symbol (e.g. a struct, enum, method, ...) in code base")]
     async fn find_symbol(
         &self,
-        Parameters(FindSymbolRequest { query }): Parameters<FindSymbolRequest>,
+        Parameters(FindSymbolRequest {
+            query,
+            path,
+            fuzzy,
+            workspace_and_dependencies,
+        }): Parameters<FindSymbolRequest>,
     ) -> Result<CallToolResult, McpError> {
         self.progress_guard.wait().await;
 
-        let resp = self
-            .client
-            .send_request::<WorkspaceSymbolRequest>(WorkspaceSymbolParams {
-                query: query.clone(),
-                ..Default::default()
-            })
-            .await
-            .internal()?
-            .not_found(query.clone())?;
+        let symbol_informations = match path {
+            Some(path) => {
+                let resp = self
+                    .client
+                    .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
+                        text_document: TextDocumentIdentifier {
+                            uri: self.path_to_uri(&path)?,
+                        },
+                        work_done_progress_params: Default::default(),
+                        partial_result_params: Default::default(),
+                    })
+                    .await
+                    .internal()?
+                    .not_found(path)?;
 
-        let response = match resp {
-            WorkspaceSymbolResponse::Flat(symbol_informations) => SymbolResult::si_vec_to_content(
-                symbol_informations
-                    .into_iter()
-                    // rust-analyzer search is fuzzy and rather unhelpful, so bring it back to something sane
-                    // TODO: make this a parameter
-                    .filter(|si| si.name == query)
-                    .collect(),
-                &self.workspace,
-            )?,
-            WorkspaceSymbolResponse::Nested(_) => {
-                return Err(McpError::internal_error(
-                    "nested symbols are not yet implemented",
-                    None,
-                ));
+                match resp {
+                    DocumentSymbolResponse::Flat(symbol_informations) => symbol_informations,
+                    DocumentSymbolResponse::Nested(_) => {
+                        return Err(McpError::internal_error(
+                            "nested symbols are not yet implemented",
+                            None,
+                        ));
+                    }
+                }
+            }
+            None => {
+                let resp = self
+                    .client
+                    .send_request::<WorkspaceSymbolRequest>(WorkspaceSymbolParams {
+                        query: query.clone(),
+                        ..Default::default()
+                    })
+                    .await
+                    .internal()?
+                    .not_found(query.clone())?;
+
+                match resp {
+                    WorkspaceSymbolResponse::Flat(symbol_informations) => symbol_informations,
+                    WorkspaceSymbolResponse::Nested(_) => {
+                        return Err(McpError::internal_error(
+                            "nested symbols are not yet implemented",
+                            None,
+                        ));
+                    }
+                }
             }
         };
+
+        let mode = if fuzzy {
+            SearchMode::Fuzzy
+        } else {
+            SearchMode::Exact
+        };
+        let response = symbol_informations
+            .into_iter()
+            // rust-analyzer search is fuzzy by default
+            .filter(|si| mode.check(&query, &si.name))
+            .map(|si| {
+                let SymbolInformation {
+                    name,
+                    kind,
+                    tags,
+                    location,
+                    ..
+                } = si;
+
+                let kind = format!("{kind:?}");
+
+                let deprecated = tags
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|tag| *tag == SymbolTag::DEPRECATED);
+
+                let path = location.uri.path();
+                let file = if path.is_absolute() {
+                    let path = PathBuf::from_str(path.as_str())
+                        .context("parse URI as path")
+                        .internal()?;
+
+                    // try to make it relative to the workspace root
+                    match (
+                        path.strip_prefix(&self.workspace),
+                        workspace_and_dependencies,
+                    ) {
+                        // path is within workspace
+                        (Ok(path2), _) => path2,
+                        // path outside workspace, but that's fine
+                        (Err(_), true) => &path,
+                        // path outside workspace, but we did not search for it
+                        (Err(_), false) => {
+                            return Ok(None);
+                        }
+                    }
+                    .display()
+                    .to_string()
+                } else {
+                    path.to_string()
+                };
+
+                let start = location.range.start;
+                let line = start.line + 1;
+                let character = start.character + 1;
+
+                let sr = SymbolResult {
+                    name,
+                    kind,
+                    deprecated,
+                    file,
+                    line,
+                    character,
+                };
+                let content = Content::json(sr)?;
+                Ok(Some(content))
+            })
+            .filter_map(Result::transpose)
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(CallToolResult::success(response))
     }
@@ -180,15 +234,21 @@ impl CodeExplorer {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-struct FileSymbolRequest {
-    #[schemars(description = "path to the file")]
-    path: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 struct FindSymbolRequest {
-    #[schemars(description = "the symbol that you are looking for")]
+    #[schemars(description = "the symbol that you are looking for", length(min = 1))]
     query: String,
+
+    #[schemars(
+        description = "path to the file, otherwise search the entire workspace",
+        default
+    )]
+    path: Option<String>,
+
+    #[schemars(description = "search fuzzy", default)]
+    fuzzy: bool,
+
+    #[schemars(description = "search workspace and dependencies", default)]
+    workspace_and_dependencies: bool,
 }
 
 #[derive(Debug, serde::Serialize, schemars::JsonSchema)]
@@ -199,63 +259,6 @@ struct SymbolResult {
     file: String,
     line: u32,
     character: u32,
-}
-
-impl SymbolResult {
-    fn try_new(si: SymbolInformation, workspace: &Path) -> Result<Self, McpError> {
-        let SymbolInformation {
-            name,
-            kind,
-            tags,
-            location,
-            ..
-        } = si;
-
-        let kind = format!("{kind:?}");
-
-        let deprecated = tags
-            .unwrap_or_default()
-            .iter()
-            .any(|tag| *tag == SymbolTag::DEPRECATED);
-
-        let path = location.uri.path();
-        let file = if path.is_absolute() {
-            let path = PathBuf::from_str(path.as_str())
-                .context("parse URI as path")
-                .internal()?;
-
-            // try to make it relative to the workspace root
-            path.strip_prefix(workspace)
-                .unwrap_or(&path)
-                .display()
-                .to_string()
-        } else {
-            path.to_string()
-        };
-
-        let start = location.range.start;
-        let line = start.line + 1;
-        let character = start.character + 1;
-
-        Ok(SymbolResult {
-            name,
-            kind,
-            deprecated,
-            file,
-            line,
-            character,
-        })
-    }
-
-    fn si_vec_to_content(
-        symbol_informations: Vec<SymbolInformation>,
-        workspace: &Path,
-    ) -> Result<Vec<Annotated<RawContent>>, McpError> {
-        symbol_informations
-            .into_iter()
-            .map(|si| Self::try_new(si, workspace).and_then(Content::json))
-            .collect::<Result<Vec<_>, McpError>>()
-    }
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
