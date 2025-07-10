@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::Context;
+use error::{OptionExt, ResultExt};
 use lsp_client::LspClient;
 use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, SymbolInformation, SymbolTag,
@@ -22,6 +23,8 @@ use rmcp::{
 };
 
 use crate::ProgressGuard;
+
+mod error;
 
 #[derive(Debug)]
 pub(crate) struct CodeExplorer {
@@ -210,49 +213,5 @@ impl ServerHandler for CodeExplorer {
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
-    }
-}
-
-trait ErrorExt {
-    fn internal(self) -> McpError;
-}
-
-impl<E> ErrorExt for E
-where
-    E: std::fmt::Display,
-{
-    fn internal(self) -> McpError {
-        McpError::internal_error(self.to_string(), None)
-    }
-}
-
-trait ResultExt {
-    type T;
-
-    fn internal(self) -> Result<Self::T, McpError>;
-}
-
-impl<T, E> ResultExt for Result<T, E>
-where
-    E: std::fmt::Display,
-{
-    type T = T;
-
-    fn internal(self) -> Result<Self::T, McpError> {
-        self.map_err(|e| e.internal())
-    }
-}
-
-trait OptionExt {
-    type T;
-
-    fn not_found(self, what: String) -> Result<Self::T, McpError>;
-}
-
-impl<T> OptionExt for Option<T> {
-    type T = T;
-
-    fn not_found(self, what: String) -> Result<Self::T, McpError> {
-        self.ok_or_else(|| McpError::resource_not_found(what, None))
     }
 }
