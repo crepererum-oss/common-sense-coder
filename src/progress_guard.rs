@@ -30,7 +30,7 @@ impl ProgressGuard {
             debug!("wait for initial language server warm-up");
             tokio::time::sleep(Duration::from_secs(2)).await;
             tx_captured.send_modify(|rdy| rdy.init = true);
-            debug!("wait for initial language server warm-up");
+            debug!("done waiting for initial language server warm-up");
 
             // never return
             futures::future::pending::<()>().await;
