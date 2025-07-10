@@ -17,7 +17,6 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
         .initialize(InitializeParams {
             capabilities: ClientCapabilities {
                 workspace: Some(WorkspaceClientCapabilities {
-                    workspace_folders: Some(true),
                     symbol: Some(WorkspaceSymbolClientCapabilities {
                         symbol_kind: Some(SymbolKindCapability {
                             // roughly based on
@@ -40,6 +39,7 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
                         }),
                         ..Default::default()
                     }),
+                    workspace_folders: Some(true),
                     ..Default::default()
                 }),
                 window: Some(WindowClientCapabilities {
@@ -53,6 +53,9 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
                 version: Some(env!("CARGO_PKG_VERSION").to_owned()),
             }),
             initialization_options: Some(json!({
+                "files": {
+                    "watcher": "server",
+                },
                 "workspace": {
                     "symbol": {
                         "search": {
