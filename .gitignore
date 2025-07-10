@@ -1,2 +1,9 @@
-/intercept
+# compilation artifacts
 /target
+
+# test artifacts
+/intercept
+
+# AI & IDE files
+/.claude
+/CLAUDE.md
