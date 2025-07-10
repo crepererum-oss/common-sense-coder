@@ -16,6 +16,10 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
     client
         .initialize(InitializeParams {
             capabilities: ClientCapabilities {
+                window: Some(WindowClientCapabilities {
+                    work_done_progress: Some(true),
+                    ..Default::default()
+                }),
                 workspace: Some(WorkspaceClientCapabilities {
                     symbol: Some(WorkspaceSymbolClientCapabilities {
                         symbol_kind: Some(SymbolKindCapability {
@@ -40,10 +44,6 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<()>
                         ..Default::default()
                     }),
                     workspace_folders: Some(true),
-                    ..Default::default()
-                }),
-                window: Some(WindowClientCapabilities {
-                    work_done_progress: Some(true),
                     ..Default::default()
                 }),
                 ..Default::default()
