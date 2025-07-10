@@ -12,7 +12,7 @@ lsp-types = "0.97.0"
 rmcp = { version = "0.2.1", features = ["macros", "transport-io"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-tokio = { version = "1.46.1", features = ["macros", "process", "rt-multi-thread"] }
+tokio = { version = "1.46.1", features = ["fs", "macros", "process", "rt-multi-thread"] }
 tracing = "0.1.41"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }

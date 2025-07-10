@@ -7,4 +7,4 @@ cd "$cargo_dir"
 
 export RUST_BACKTRACE=1
 # export RA_LOG=info
-exec cargo run -- --workspace="." -vv
+exec cargo run -- --intercept-io="intercept" --workspace="." -vv

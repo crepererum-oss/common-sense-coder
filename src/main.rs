@@ -3,6 +3,7 @@ use std::{path::PathBuf, process::Stdio, sync::Arc};
 use anyhow::{Context, Result};
 use clap::Parser;
 use init::init_lsp;
+use io_intercept::{BoxRead, BoxWrite, ReadFork, WriteFork};
 use logging::{LoggingCLIConfig, setup_logging};
 use lsp_client::{LspClient, transport::io_transport};
 use mcp::CodeExplorer;
@@ -15,6 +16,7 @@ use tokio::{
 use tracing::{info, warn};
 
 mod init;
+mod io_intercept;
 mod logging;
 mod mcp;
 mod progress_guard;
@@ -23,6 +25,12 @@ mod progress_guard;
 struct Args {
     #[clap(long)]
     workspace: PathBuf,
+
+    /// Intercept IO to/from language server and MCP client for debugging.
+    ///
+    /// Dumps are stored in separate files in the provided directory.
+    #[clap(long)]
+    intercept_io: Option<PathBuf>,
 
     /// Logging config.
     #[clap(flatten)]
@@ -33,6 +41,8 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
     setup_logging(args.logging_cfg).context("logging setup")?;
+
+    let mut tasks = JoinSet::new();
 
     let workspace = args
         .workspace
@@ -49,16 +59,44 @@ async fn main() -> Result<()> {
         .spawn()
         .context("cannot spawn language server")?;
 
-    let stdin = child.stdin.take().expect("just initialized");
-    let stdout = child.stdout.take().expect("just initialized");
+    if let Some(intercept_io) = &args.intercept_io {
+        tokio::fs::create_dir_all(intercept_io)
+            .await
+            .context("create directories for IO interception")?;
+    }
+
+    let stdin = Box::pin(child.stdin.take().expect("just initialized")) as BoxWrite;
+    let stdout = Box::pin(child.stdout.take().expect("just initialized")) as BoxRead;
+    let (stdin, stdout) = if let Some(intercept_io) = &args.intercept_io {
+        let stdin =
+            Box::pin(WriteFork::new(stdin, intercept_io, "lsp.stdin.txt", &mut tasks).await?) as _;
+        let stdout =
+            Box::pin(ReadFork::new(stdout, intercept_io, "lsp.stdout.txt", &mut tasks).await?) as _;
+        (stdin, stdout)
+    } else {
+        (stdin, stdout)
+    };
     let (tx, rx) = io_transport(stdin, stdout);
     let client = Arc::new(LspClient::new(tx, rx));
 
-    let mut tasks = JoinSet::new();
     let progress_guard = ProgressGuard::start(&mut tasks, Arc::clone(&client));
 
+    let (stdin, stdout) = stdio();
+    let stdin = Box::pin(stdin) as BoxRead;
+    let stdout = Box::pin(stdout) as BoxWrite;
+    let (stdin, stdout) = if let Some(intercept_io) = &args.intercept_io {
+        let stdin =
+            Box::pin(ReadFork::new(stdin, intercept_io, "mcp.stdin.txt", &mut tasks).await?) as _;
+        let stdout =
+            Box::pin(WriteFork::new(stdout, intercept_io, "mcp.stdout.txt", &mut tasks).await?)
+                as _;
+        (stdin, stdout)
+    } else {
+        (stdin, stdout)
+    };
+
     let mut res = tokio::select! {
-        res = main_inner(client, progress_guard, workspace) => {
+        res = main_inner(client, progress_guard, workspace, stdin, stdout) => {
             res.context("main")
         }
         res = tasks.join_next(), if !tasks.is_empty() => {
@@ -92,11 +130,13 @@ async fn main_inner(
     client: Arc<LspClient>,
     progress_guard: ProgressGuard,
     workspace: PathBuf,
+    stdin: BoxRead,
+    stdout: BoxWrite,
 ) -> Result<()> {
     init_lsp(&client, &workspace).await.context("init lsp")?;
 
     let service = CodeExplorer::new(client, progress_guard, workspace)
-        .serve(stdio())
+        .serve((stdin, stdout))
         .await
         .context("set up code explorer service")?;
     service.waiting().await?;
