@@ -49,21 +49,35 @@ async fn main() -> Result<()> {
         .canonicalize()
         .context("canonicalize workspace path")?;
 
-    // TODO: stderr to log file
-    let mut child = Command::new("rust-analyzer")
-        .current_dir(&args.workspace)
-        .kill_on_drop(true)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .context("cannot spawn language server")?;
-
     if let Some(intercept_io) = &args.intercept_io {
         tokio::fs::create_dir_all(intercept_io)
             .await
             .context("create directories for IO interception")?;
     }
+
+    let stderr = if let Some(intercept_io) = &args.intercept_io {
+        Stdio::from(
+            tokio::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(intercept_io.join("lsp.stderr.txt"))
+                .await
+                .context("open stderr log file for language server")?
+                .into_std()
+                .await,
+        )
+    } else {
+        Stdio::inherit()
+    };
+
+    let mut child = Command::new("rust-analyzer")
+        .current_dir(&args.workspace)
+        .kill_on_drop(true)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(stderr)
+        .spawn()
+        .context("cannot spawn language server")?;
 
     let stdin = Box::pin(child.stdin.take().expect("just initialized")) as BoxWrite;
     let stdout = Box::pin(child.stdout.take().expect("just initialized")) as BoxRead;
