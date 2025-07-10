@@ -149,7 +149,7 @@ async fn main_inner(
 ) -> Result<()> {
     init_lsp(&client, &workspace).await.context("init lsp")?;
 
-    let service = CodeExplorer::new(client, progress_guard, workspace)
+    let service = CodeExplorer::new(progress_guard, workspace)
         .serve((stdin, stdout))
         .await
         .context("set up code explorer service")?;

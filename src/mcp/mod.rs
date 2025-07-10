@@ -1,8 +1,7 @@
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{path::PathBuf, str::FromStr};
 
 use anyhow::Context;
 use error::{OptionExt, ResultExt};
-use lsp_client::LspClient;
 use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, HoverContents, HoverParams, LanguageString,
     MarkedString, Position, SymbolInformation, SymbolTag, TextDocumentIdentifier,
@@ -24,7 +23,6 @@ mod search;
 
 #[derive(Debug)]
 pub(crate) struct CodeExplorer {
-    client: Arc<LspClient>,
     progress_guard: ProgressGuard,
     workspace: PathBuf,
     tool_router: ToolRouter<Self>,
@@ -32,13 +30,8 @@ pub(crate) struct CodeExplorer {
 
 #[tool_router]
 impl CodeExplorer {
-    pub(crate) fn new(
-        client: Arc<LspClient>,
-        progress_guard: ProgressGuard,
-        workspace: PathBuf,
-    ) -> Self {
+    pub(crate) fn new(progress_guard: ProgressGuard, workspace: PathBuf) -> Self {
         Self {
-            client,
             progress_guard,
             workspace,
             tool_router: Self::tool_router(),
@@ -66,12 +59,11 @@ impl CodeExplorer {
             workspace_and_dependencies,
         }): Parameters<FindSymbolRequest>,
     ) -> Result<CallToolResult, McpError> {
-        self.progress_guard.wait().await;
+        let client = self.progress_guard.wait().await;
 
         let symbol_informations = match path {
             Some(path) => {
-                let resp = self
-                    .client
+                let resp = client
                     .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
                         text_document: TextDocumentIdentifier {
                             uri: self.path_to_uri(&path)?,
@@ -94,8 +86,7 @@ impl CodeExplorer {
                 }
             }
             None => {
-                let resp = self
-                    .client
+                let resp = client
                     .send_request::<WorkspaceSymbolRequest>(WorkspaceSymbolParams {
                         query: query.clone(),
                         ..Default::default()
@@ -197,12 +188,11 @@ impl CodeExplorer {
             character,
         }): Parameters<SymbolInfoRequest>,
     ) -> Result<CallToolResult, McpError> {
-        self.progress_guard.wait().await;
+        let client = self.progress_guard.wait().await;
 
         let uri = self.path_to_uri(&path)?;
 
-        let resp = self
-            .client
+        let resp = client
             .send_request::<HoverRequest>(HoverParams {
                 text_document_position_params: TextDocumentPositionParams {
                     text_document: TextDocumentIdentifier { uri },

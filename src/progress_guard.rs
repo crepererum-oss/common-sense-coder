@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashSet, ops::Deref, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use lsp_client::LspClient;
@@ -13,6 +13,7 @@ use tracing::debug;
 #[derive(Debug, Clone)]
 pub(crate) struct ProgressGuard {
     rx: Receiver<Ready>,
+    client: Arc<LspClient>,
 }
 
 impl ProgressGuard {
@@ -37,7 +38,9 @@ impl ProgressGuard {
             Ok(())
         });
 
+        let client_captured = Arc::clone(&client);
         tasks.spawn(async move {
+            let client = client_captured;
             let mut subscription = client
                 .subscribe_to_method::<Progress>()
                 .await
@@ -84,13 +87,30 @@ impl ProgressGuard {
             Result::Ok(())
         });
 
-        Self { rx }
+        Self { rx, client }
     }
 
     /// Wait for all outstanding tasks.
-    pub(crate) async fn wait(&self) {
+    pub(crate) async fn wait(&self) -> Guard<'_> {
         // accept errors during shutdown
         self.rx.clone().wait_for(|rdy| rdy.ready()).await.ok();
+
+        Guard {
+            process_guard: self,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Guard<'a> {
+    process_guard: &'a ProgressGuard,
+}
+
+impl Deref for Guard<'_> {
+    type Target = LspClient;
+
+    fn deref(&self) -> &Self::Target {
+        self.process_guard.client.as_ref()
     }
 }
 
