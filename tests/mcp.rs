@@ -1,0 +1,252 @@
+use std::{path::Path, process::Stdio};
+
+use rmcp::{
+    RoleClient,
+    model::{CallToolRequestParam, JsonObject, RawContent},
+    service::{RunningService, ServiceExt},
+    transport::TokioChildProcess,
+};
+use serde::Serialize;
+use serde_json::{Value, json};
+use tempfile::TempDir;
+use tokio::process::Command;
+
+const BIN_PATH: &str = env!("CARGO_BIN_EXE_mcp-lsp-bridge");
+
+#[tokio::test]
+async fn test_find_symbol() {
+    let setup = TestSetup::new().await;
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("does_not_exist")),
+        ])).await,
+        @"[]",
+    );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("my_lib_fn")),
+        ])).await,
+        @r#"
+    [
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 3,
+        "character": 8
+      }
+    ]
+    "#,
+    );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("my_lib_fn")),
+            ("workspace_and_dependencies", json!(true)),
+        ])).await,
+        @r#"
+    [
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "/fixtures/dependency_lib/src/lib.rs",
+        "line": 1,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 3,
+        "character": 8
+      }
+    ]
+    "#,
+    );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("mylibfn")),
+        ])).await,
+        @"[]",
+    );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("mylibfn")),
+            ("workspace_and_dependencies", json!(true)),
+        ])).await,
+        @"[]",
+    );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("mylibfn")),
+            ("fuzzy", json!(true)),
+        ])).await,
+        @r#"
+    [
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 3,
+        "character": 8
+      }
+    ]
+    "#,
+    );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("mylibfn")),
+            ("fuzzy", json!(true)),
+            ("workspace_and_dependencies", json!(true)),
+        ])).await,
+        @r#"
+    [
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "/fixtures/dependency_lib/src/lib.rs",
+        "line": 1,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 3,
+        "character": 8
+      }
+    ]
+    "#,
+    );
+}
+
+struct TestSetup {
+    fixtures_path: String,
+    intercept_io_dir: TempDir,
+    service: RunningService<RoleClient, ()>,
+}
+
+impl TestSetup {
+    async fn new() -> Self {
+        let server_path = Path::new(BIN_PATH).canonicalize().expect("canonicalize");
+
+        let fixtures_path = Path::new(file!())
+            .parent()
+            .expect("parent")
+            .join("fixtures")
+            .canonicalize()
+            .expect("canonicalize");
+        let main_lib_path = fixtures_path.join("main_lib").display().to_string();
+
+        let intercept_io_dir = TempDir::new().expect("temp dir creation");
+        let intercept_io_path = intercept_io_dir.path();
+        println!("intercept IO: {}", intercept_io_path.display());
+
+        let server_stderr_path = intercept_io_path.join("server.stderr.txt");
+        println!("server stderr: {}", server_stderr_path.display());
+        let server_stderr = Stdio::from(
+            tokio::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&server_stderr_path)
+                .await
+                .expect("open stderr log file for language server")
+                .into_std()
+                .await,
+        );
+
+        let mut cmd = Command::new(server_path);
+        cmd.env("RA_LOG", "info")
+            .env("RUST_BACKTRACE", "1")
+            .arg("--intercept-io")
+            .arg(intercept_io_path.display().to_string())
+            .arg("--workspace")
+            .arg(main_lib_path)
+            .arg("-vv")
+            .stderr(server_stderr);
+
+        let service =
+            ().serve(TokioChildProcess::new(cmd).expect("tokio child process spawn"))
+                .await
+                .expect("service start");
+
+        Self {
+            fixtures_path: fixtures_path.display().to_string(),
+            intercept_io_dir,
+            service,
+        }
+    }
+
+    async fn call_tool_ok(&self, params: CallToolRequestParam) -> Vec<TextOrJson> {
+        let resp = self.service.call_tool(params).await.expect("call tool");
+
+        assert!(!resp.is_error.unwrap_or_default());
+
+        resp.content
+            .into_iter()
+            .map(|annotated| match annotated.raw {
+                RawContent::Text(raw_text_content) => TextOrJson::from(
+                    raw_text_content
+                        .text
+                        .replace(&self.fixtures_path, "/fixtures"),
+                ),
+                RawContent::Image(_) => unimplemented!("image content not supported"),
+                RawContent::Resource(_) => unimplemented!("resource content not supported"),
+                RawContent::Audio(_) => unimplemented!("audio content not supported"),
+            })
+            .collect()
+    }
+
+    async fn find_symbol_ok(&self, args: JsonObject) -> Vec<TextOrJson> {
+        self.call_tool_ok(CallToolRequestParam {
+            name: "find_symbol".into(),
+            arguments: Some(args),
+        })
+        .await
+    }
+}
+
+impl Drop for TestSetup {
+    fn drop(&mut self) {
+        self.intercept_io_dir
+            .disable_cleanup(std::thread::panicking());
+    }
+}
+
+fn map<const N: usize>(m: [(&'static str, Value); N]) -> JsonObject {
+    m.into_iter().map(|(k, v)| (k.to_owned(), v)).collect()
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum TextOrJson {
+    Text(String),
+    Json(JsonObject),
+}
+
+impl From<String> for TextOrJson {
+    fn from(s: String) -> Self {
+        match serde_json::from_str::<JsonObject>(&s) {
+            Ok(obj) => Self::Json(obj),
+            Err(_) => Self::Text(s),
+        }
+    }
+}

@@ -11,8 +11,19 @@ lsp-client = "0.1.0"
 lsp-types = "0.97.0"
 rmcp = { version = "0.2.1", features = ["macros", "transport-io"] }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde_json = { version = "1.0.140", features = ["preserve_order"] }
 tokio = { version = "1.46.1", features = ["fs", "macros", "process", "rt-multi-thread"] }
 tracing = "0.1.41"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
+[dev-dependencies]
+insta = { version = "1.43.1", features = ["json"] }
+rmcp = { version = "0.2.1", features = ["client", "transport-child-process"] }
+tempfile = "3.20.0"
+
+[profile.dev.package.insta]
+opt-level = 3
+
+[profile.dev.package.similar]
+opt-level = 3

@@ -54,6 +54,8 @@ impl CodeExplorer {
 
         let query = empty_string_to_none(query);
         let path = empty_string_to_none(path);
+        let fuzzy = fuzzy.unwrap_or_default();
+        let workspace_and_dependencies = workspace_and_dependencies.unwrap_or_default();
 
         let symbol_informations = match path {
             Some(path) => {
@@ -286,11 +288,11 @@ struct FindSymbolRequest {
     )]
     path: Option<String>,
 
-    #[schemars(description = "search fuzzy", default)]
-    fuzzy: bool,
+    #[schemars(description = "search fuzzy")]
+    fuzzy: Option<bool>,
 
-    #[schemars(description = "search workspace and dependencies", default)]
-    workspace_and_dependencies: bool,
+    #[schemars(description = "search workspace and dependencies")]
+    workspace_and_dependencies: Option<bool>,
 }
 
 #[derive(Debug, serde::Serialize, schemars::JsonSchema)]
