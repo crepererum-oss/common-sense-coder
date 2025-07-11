@@ -43,7 +43,6 @@ pub(crate) fn setup_logging(config: LoggingCLIConfig) -> Result<()> {
             _ => "trace".to_owned(),
         },
     };
-    dbg!(&filter);
     let filter = EnvFilter::try_new(filter).context("set up log env filter")?;
 
     let writer = std::io::stderr;
