@@ -1,4 +1,8 @@
-use std::{path::PathBuf, process::Stdio, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    process::Stdio,
+    sync::Arc,
+};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -44,10 +48,11 @@ async fn main() -> Result<()> {
 
     let mut tasks = JoinSet::new();
 
-    let workspace = args
-        .workspace
-        .canonicalize()
-        .context("canonicalize workspace path")?;
+    let workspace = Arc::from(
+        args.workspace
+            .canonicalize()
+            .context("canonicalize workspace path")?,
+    );
 
     if let Some(intercept_io) = &args.intercept_io {
         tokio::fs::create_dir_all(intercept_io)
@@ -143,7 +148,7 @@ async fn main() -> Result<()> {
 async fn main_inner(
     client: Arc<LspClient>,
     progress_guard: ProgressGuard,
-    workspace: PathBuf,
+    workspace: Arc<Path>,
     stdin: BoxRead,
     stdout: BoxWrite,
 ) -> Result<()> {

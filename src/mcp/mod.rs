@@ -1,12 +1,12 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::Path, sync::Arc};
 
-use anyhow::Context;
 use error::{OptionExt, ResultExt};
+use location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri};
 use lsp_types::{
-    DocumentSymbolParams, DocumentSymbolResponse, HoverContents, HoverParams, LanguageString,
-    MarkedString, Position, SymbolInformation, SymbolTag, TextDocumentIdentifier,
-    TextDocumentPositionParams, Uri, WorkspaceSymbolParams, WorkspaceSymbolResponse,
-    request::{DocumentSymbolRequest, HoverRequest, WorkspaceSymbolRequest},
+    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, HoverContents, HoverParams,
+    LanguageString, MarkedString, SymbolInformation, SymbolTag, TextDocumentIdentifier,
+    TextDocumentPositionParams, WorkspaceSymbolParams, WorkspaceSymbolResponse,
+    request::{DocumentSymbolRequest, GotoDefinition, HoverRequest, WorkspaceSymbolRequest},
 };
 use rmcp::{
     ServerHandler,
@@ -15,38 +15,29 @@ use rmcp::{
     schemars, tool, tool_handler, tool_router,
 };
 use search::SearchMode;
+use tracing::debug;
 
 use crate::ProgressGuard;
 
 mod error;
+mod location;
 mod search;
 
 #[derive(Debug)]
 pub(crate) struct CodeExplorer {
     progress_guard: ProgressGuard,
-    workspace: PathBuf,
+    workspace: Arc<Path>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl CodeExplorer {
-    pub(crate) fn new(progress_guard: ProgressGuard, workspace: PathBuf) -> Self {
+    pub(crate) fn new(progress_guard: ProgressGuard, workspace: Arc<Path>) -> Self {
         Self {
             progress_guard,
             workspace,
             tool_router: Self::tool_router(),
         }
-    }
-
-    fn path_to_uri(&self, path: &str) -> Result<Uri, McpError> {
-        // prefix relative paths with workspace
-        let path = if path.starts_with("/") {
-            path
-        } else {
-            &format!("{}/{path}", self.workspace.display())
-        };
-
-        format!("file://{path}").parse().internal()
     }
 
     #[tool(description = "find symbol (e.g. a struct, enum, method, ...) in code base")]
@@ -69,7 +60,7 @@ impl CodeExplorer {
                 let resp = client
                     .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
                         text_document: TextDocumentIdentifier {
-                            uri: self.path_to_uri(&path)?,
+                            uri: path_to_uri(&self.workspace, &path)?,
                         },
                         work_done_progress_params: Default::default(),
                         partial_result_params: Default::default(),
@@ -141,35 +132,21 @@ impl CodeExplorer {
                     .iter()
                     .any(|tag| *tag == SymbolTag::DEPRECATED);
 
-                let path = location.uri.path();
-                let file = if path.is_absolute() {
-                    let path = PathBuf::from_str(path.as_str())
-                        .context("parse URI as path")
-                        .internal()?;
-
-                    // try to make it relative to the workspace root
-                    match (
-                        path.strip_prefix(&self.workspace),
-                        workspace_and_dependencies,
-                    ) {
-                        // path is within workspace
-                        (Ok(path2), _) => path2,
-                        // path outside workspace, but that's fine
-                        (Err(_), true) => &path,
-                        // path outside workspace, but we did not search for it
-                        (Err(_), false) => {
-                            return Ok(None);
-                        }
+                let McpLocation {
+                    file,
+                    line,
+                    character,
+                    workspace: _,
+                } = match McpLocation::try_new(
+                    location,
+                    Arc::clone(&self.workspace),
+                    workspace_and_dependencies,
+                )? {
+                    Some(loc) => loc,
+                    None => {
+                        return Ok(None);
                     }
-                    .display()
-                    .to_string()
-                } else {
-                    path.to_string()
                 };
-
-                let start = location.range.start;
-                let line = start.line + 1;
-                let character = start.character + 1;
 
                 let sr = SymbolResult {
                     name,
@@ -195,40 +172,103 @@ impl CodeExplorer {
             path,
             line,
             character,
+            workspace_and_dependencies,
         }): Parameters<SymbolInfoRequest>,
     ) -> Result<CallToolResult, McpError> {
         let client = self.progress_guard.wait().await;
 
-        let uri = self.path_to_uri(&path)?;
+        let character = match character {
+            Some(c) => c,
+            None => {
+                // auto-detect character
+                let resp = client
+                    .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
+                        text_document: path_to_text_document_identifier(&self.workspace, &path)?,
+                        work_done_progress_params: Default::default(),
+                        partial_result_params: Default::default(),
+                    })
+                    .await
+                    .internal()?
+                    .not_found(path.clone())?;
 
+                let candidates = match resp {
+                    DocumentSymbolResponse::Flat(symbol_informations) => symbol_informations
+                        .into_iter()
+                        .map(|si| si.location.range)
+                        .filter(|range| range.start.line + 1 <= line && line <= range.end.line + 1)
+                        .map(|range| range.start.character + 1)
+                        .collect::<Vec<_>>(),
+                    DocumentSymbolResponse::Nested(_) => {
+                        return Err(McpError::internal_error(
+                            "nested symbols are not yet implemented",
+                            None,
+                        ));
+                    }
+                };
+
+                match candidates.as_slice() {
+                    [] => {
+                        return Err(McpError::resource_not_found(format!("{path}:{line}"), None));
+                    }
+                    [c] => {
+                        debug!(path, line, character = *c, "auto-detected character");
+                        *c
+                    }
+                    multiple => {
+                        return Err(McpError::invalid_params(
+                            format!("multiple symbols at {path}:{line} at position {multiple:?}"),
+                            None,
+                        ));
+                    }
+                }
+            }
+        };
+        let location = McpLocation {
+            file: path,
+            line,
+            character,
+            workspace: self.workspace.clone(),
+        };
+        let text_document_position_params = TextDocumentPositionParams::try_from(&location)?;
         let resp = client
             .send_request::<HoverRequest>(HoverParams {
-                text_document_position_params: TextDocumentPositionParams {
-                    text_document: TextDocumentIdentifier { uri },
-                    position: Position {
-                        line: line - 1,
-                        character: character - 1,
-                    },
-                },
+                text_document_position_params: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
             })
             .await
             .internal()?
-            .not_found(format!("{path}:{line}:{character}"))?;
+            .not_found(location.to_string())?;
 
-        let res = match resp.contents {
+        let mut sections = match resp.contents {
             HoverContents::Scalar(markup_string) => {
-                vec![Content::text(format_marked_string(markup_string))]
+                vec![format_marked_string(markup_string)]
             }
             HoverContents::Array(marked_strings) => marked_strings
                 .into_iter()
                 .map(format_marked_string)
-                .map(Content::text)
                 .collect(),
-            HoverContents::Markup(markup_content) => vec![Content::text(markup_content.value)],
+            HoverContents::Markup(markup_content) => vec![markup_content.value],
         };
 
-        Ok(CallToolResult::success(res))
+        if let Some(resp) = client
+            .send_request::<GotoDefinition>(GotoDefinitionParams {
+                text_document_position_params,
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .internal()?
+        {
+            sections.push(format!(
+                "Definition:\n\n{}",
+                LocationVariants::from(resp)
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
+            ))
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(
+            sections.join("\n\n---\n\n"),
+        )]))
     }
 }
 
@@ -275,7 +315,10 @@ struct SymbolInfoRequest {
         description = "1-based character index within the line",
         range(min = 1)
     )]
-    character: u32,
+    character: Option<u32>,
+
+    #[schemars(description = "search workspace and dependencies", default)]
+    workspace_and_dependencies: bool,
 }
 
 fn format_marked_string(s: MarkedString) -> String {

@@ -54,6 +54,6 @@ impl<T> OptionExt for Option<T> {
     }
 
     fn required(self, what: String) -> Result<Self::T, McpError> {
-        self.ok_or_else(|| McpError::invalid_request(format!("{what} is required"), None))
+        self.ok_or_else(|| McpError::invalid_params(format!("{what} is required"), None))
     }
 }
