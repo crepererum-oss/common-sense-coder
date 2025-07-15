@@ -1,4 +1,4 @@
-use std::{path::Path, process::Stdio};
+use std::{ops::Deref, path::Path, process::Stdio};
 
 use rmcp::{
     RoleClient,
@@ -138,9 +138,39 @@ async fn test_find_symbol() {
     );
 }
 
+struct InterceptIoDir {
+    dir: TempDir,
+}
+
+impl InterceptIoDir {
+    fn new() -> Self {
+        let dir = TempDir::new().expect("temp dir creation");
+        println!("intercept IO: {}", dir.path().display());
+
+        Self { dir }
+    }
+}
+
+impl Deref for InterceptIoDir {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.dir.path()
+    }
+}
+
+impl Drop for InterceptIoDir {
+    fn drop(&mut self) {
+        self.dir.disable_cleanup(std::thread::panicking());
+    }
+}
+
 struct TestSetup {
     fixtures_path: String,
-    intercept_io_dir: TempDir,
+
+    #[allow(dead_code)]
+    intercept_io_dir: InterceptIoDir,
+
     service: RunningService<RoleClient, ()>,
 }
 
@@ -156,11 +186,8 @@ impl TestSetup {
             .expect("canonicalize");
         let main_lib_path = fixtures_path.join("main_lib").display().to_string();
 
-        let intercept_io_dir = TempDir::new().expect("temp dir creation");
-        let intercept_io_path = intercept_io_dir.path();
-        println!("intercept IO: {}", intercept_io_path.display());
-
-        let server_stderr_path = intercept_io_path.join("server.stderr.txt");
+        let intercept_io_dir = InterceptIoDir::new();
+        let server_stderr_path = intercept_io_dir.join("server.stderr.txt");
         println!("server stderr: {}", server_stderr_path.display());
         let server_stderr = Stdio::from(
             tokio::fs::OpenOptions::new()
@@ -177,7 +204,7 @@ impl TestSetup {
         cmd.env("RA_LOG", "info")
             .env("RUST_BACKTRACE", "1")
             .arg("--intercept-io")
-            .arg(intercept_io_path.display().to_string())
+            .arg(intercept_io_dir.display().to_string())
             .arg("--workspace")
             .arg(main_lib_path)
             .arg("-vv")
@@ -221,13 +248,6 @@ impl TestSetup {
             arguments: Some(args),
         })
         .await
-    }
-}
-
-impl Drop for TestSetup {
-    fn drop(&mut self) {
-        self.intercept_io_dir
-            .disable_cleanup(std::thread::panicking());
     }
 }
 
