@@ -206,6 +206,15 @@ async fn test_path() {
         "file": "src/lib.rs",
         "line": 6,
         "character": 1
+      },
+      {
+        "type": "json",
+        "name": "private_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 10,
+        "character": 1
       }
     ]
     "#

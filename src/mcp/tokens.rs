@@ -67,10 +67,31 @@ pub(crate) struct Document {
     tokens: Vec<Token>,
 }
 
+impl Document {
+    pub(crate) fn query(
+        &self,
+        name: &str,
+        line: Option<u32>,
+        character: Option<u32>,
+    ) -> Option<(u32, u32)> {
+        self.tokens
+            .iter()
+            .filter(|token| token.data == name)
+            .min_by_key(|token| {
+                (
+                    line.map(|line| line.abs_diff(token.line + 1)),
+                    character.map(|character| character.abs_diff(token.start + 1)),
+                )
+            })
+            .map(|token| (token.line + 1, token.start + 1))
+    }
+}
+
 #[derive(Debug)]
 struct Token {
     line: u32,
     start: u32,
+    #[expect(dead_code)]
     token_type: String,
     data: String,
 }

@@ -1,12 +1,18 @@
 use std::{path::Path, sync::Arc};
 
+use anyhow::Context;
 use error::{OptionExt, ResultExt};
 use location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri};
 use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, HoverContents, HoverParams,
-    LanguageString, MarkedString, SymbolInformation, SymbolTag, TextDocumentIdentifier,
-    TextDocumentPositionParams, WorkspaceSymbolParams, WorkspaceSymbolResponse,
-    request::{DocumentSymbolRequest, GotoDefinition, HoverRequest, WorkspaceSymbolRequest},
+    LanguageString, MarkedString, ReferenceContext, ReferenceParams, SemanticTokensParams,
+    SymbolInformation, SymbolTag, TextDocumentIdentifier, TextDocumentPositionParams,
+    WorkspaceSymbolParams, WorkspaceSymbolResponse,
+    request::{
+        DocumentSymbolRequest, GotoDeclaration, GotoDeclarationParams, GotoDefinition,
+        GotoImplementation, GotoImplementationParams, GotoTypeDefinition, GotoTypeDefinitionParams,
+        HoverRequest, References, SemanticTokensFullRequest, WorkspaceSymbolRequest,
+    },
 };
 use rmcp::{
     ServerHandler,
@@ -15,26 +21,34 @@ use rmcp::{
     schemars, tool, tool_handler, tool_router,
 };
 use search::SearchMode;
-use tracing::debug;
 
 use crate::ProgressGuard;
+
+pub(crate) use tokens::TokenLegend;
 
 mod error;
 mod location;
 mod search;
+mod tokens;
 
 #[derive(Debug)]
 pub(crate) struct CodeExplorer {
     progress_guard: ProgressGuard,
+    token_legend: TokenLegend,
     workspace: Arc<Path>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl CodeExplorer {
-    pub(crate) fn new(progress_guard: ProgressGuard, workspace: Arc<Path>) -> Self {
+    pub(crate) fn new(
+        progress_guard: ProgressGuard,
+        token_legend: TokenLegend,
+        workspace: Arc<Path>,
+    ) -> Self {
         Self {
             progress_guard,
+            token_legend,
             workspace,
             tool_router: Self::tool_router(),
         }
@@ -172,6 +186,7 @@ impl CodeExplorer {
         &self,
         Parameters(SymbolInfoRequest {
             path,
+            name,
             line,
             character,
             workspace_and_dependencies,
@@ -179,58 +194,45 @@ impl CodeExplorer {
     ) -> Result<CallToolResult, McpError> {
         let client = self.progress_guard.wait().await;
 
-        let character = match character {
-            Some(c) => c,
-            None => {
-                // auto-detect character
-                let resp = client
-                    .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
-                        text_document: path_to_text_document_identifier(&self.workspace, &path)?,
-                        work_done_progress_params: Default::default(),
-                        partial_result_params: Default::default(),
-                    })
-                    .await
-                    .internal()?
-                    .not_found(path.clone())?;
+        let workspace_and_dependencies = workspace_and_dependencies.unwrap_or_default();
 
-                let candidates = match resp {
-                    DocumentSymbolResponse::Flat(symbol_informations) => symbol_informations
-                        .into_iter()
-                        .map(|si| si.location.range)
-                        .filter(|range| range.start.line + 1 <= line && line <= range.end.line + 1)
-                        .map(|range| range.start.character + 1)
-                        .collect::<Vec<_>>(),
-                    DocumentSymbolResponse::Nested(_) => {
-                        return Err(McpError::internal_error(
-                            "nested symbols are not yet implemented",
-                            None,
-                        ));
-                    }
-                };
-
-                match candidates.as_slice() {
-                    [] => {
-                        return Err(McpError::resource_not_found(format!("{path}:{line}"), None));
-                    }
-                    [c] => {
-                        debug!(path, line, character = *c, "auto-detected character");
-                        *c
-                    }
-                    multiple => {
-                        return Err(McpError::invalid_params(
-                            format!("multiple symbols at {path}:{line} at position {multiple:?}"),
-                            None,
-                        ));
-                    }
-                }
+        let resp = client
+            .send_request::<SemanticTokensFullRequest>(SemanticTokensParams {
+                text_document: path_to_text_document_identifier(&self.workspace, &path)?,
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .internal()?
+            .not_found(path.clone())?;
+        let file = tokio::fs::read_to_string(self.workspace.join(&path))
+            .await
+            .context("read file")
+            .internal()?;
+        let doc = match resp {
+            lsp_types::SemanticTokensResult::Tokens(semantic_tokens) => self
+                .token_legend
+                .decode(file, semantic_tokens.data)
+                .internal()?,
+            lsp_types::SemanticTokensResult::Partial(_) => {
+                return Err(McpError::internal_error(
+                    "partial semantic token results are not supported",
+                    None,
+                ));
             }
         };
+        let (line, character) = doc
+            .query(&name, line, character)
+            .not_found("symbol".to_owned())?;
         let location = McpLocation {
             file: path,
             line,
             character,
             workspace: self.workspace.clone(),
         };
+
+        let mut sections = vec![format!("Token Location:\n\n{location}")];
+
         let text_document_position_params = TextDocumentPositionParams::try_from(&location)?;
         let resp = client
             .send_request::<HoverRequest>(HoverParams {
@@ -241,7 +243,7 @@ impl CodeExplorer {
             .internal()?
             .not_found(location.to_string())?;
 
-        let mut sections = match resp.contents {
+        sections.extend(match resp.contents {
             HoverContents::Scalar(markup_string) => {
                 vec![format_marked_string(markup_string)]
             }
@@ -250,11 +252,27 @@ impl CodeExplorer {
                 .map(format_marked_string)
                 .collect(),
             HoverContents::Markup(markup_content) => vec![markup_content.value],
-        };
+        });
+
+        if let Some(resp) = client
+            .send_request::<GotoDeclaration>(GotoDeclarationParams {
+                text_document_position_params: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .internal()?
+        {
+            sections.push(format!(
+                "Declaration:\n\n{}",
+                LocationVariants::from(resp)
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
+            ))
+        }
 
         if let Some(resp) = client
             .send_request::<GotoDefinition>(GotoDefinitionParams {
-                text_document_position_params,
+                text_document_position_params: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
                 partial_result_params: Default::default(),
             })
@@ -266,6 +284,71 @@ impl CodeExplorer {
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
             ))
+        }
+
+        if let Some(resp) = client
+            .send_request::<GotoImplementation>(GotoImplementationParams {
+                text_document_position_params: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .internal()?
+        {
+            sections.push(format!(
+                "Implementation:\n\n{}",
+                LocationVariants::from(resp)
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
+            ))
+        }
+
+        if let Some(resp) = client
+            .send_request::<GotoTypeDefinition>(GotoTypeDefinitionParams {
+                text_document_position_params: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .internal()?
+        {
+            sections.push(format!(
+                "Type Definition:\n\n{}",
+                LocationVariants::from(resp)
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
+            ))
+        }
+
+        if let Some(locations) = client
+            .send_request::<References>(ReferenceParams {
+                text_document_position: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                context: ReferenceContext {
+                    include_declaration: false,
+                },
+            })
+            .await
+            .internal()?
+        {
+            let locations = locations
+                .into_iter()
+                .filter_map(|loc| {
+                    McpLocation::try_new(
+                        loc,
+                        Arc::clone(&self.workspace),
+                        workspace_and_dependencies,
+                    )
+                    .ok()
+                    .flatten()
+                })
+                .map(|loc| format!("- {loc}"))
+                .collect::<Vec<_>>();
+            let locations = if locations.is_empty() {
+                "None".to_owned()
+            } else {
+                locations.join("\n")
+            };
+            sections.push(format!("References:\n\n{locations}"))
         }
 
         Ok(CallToolResult::success(vec![Content::text(
@@ -310,8 +393,11 @@ struct SymbolInfoRequest {
     #[schemars(description = "path to the file")]
     path: String,
 
+    #[schemars(description = "symbol name")]
+    name: String,
+
     #[schemars(description = "1-based line number within the file", range(min = 1))]
-    line: u32,
+    line: Option<u32>,
 
     #[schemars(
         description = "1-based character index within the line",
@@ -320,7 +406,7 @@ struct SymbolInfoRequest {
     character: Option<u32>,
 
     #[schemars(description = "search workspace and dependencies", default)]
-    workspace_and_dependencies: bool,
+    workspace_and_dependencies: Option<bool>,
 }
 
 fn format_marked_string(s: MarkedString) -> String {

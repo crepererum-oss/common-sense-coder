@@ -152,9 +152,9 @@ async fn main_inner(
     stdin: BoxRead,
     stdout: BoxWrite,
 ) -> Result<()> {
-    init_lsp(&client, &workspace).await.context("init lsp")?;
+    let token_legend = init_lsp(&client, &workspace).await.context("init lsp")?;
 
-    let service = CodeExplorer::new(progress_guard, workspace)
+    let service = CodeExplorer::new(progress_guard, token_legend, workspace)
         .serve((stdin, stdout))
         .await
         .context("set up code explorer service")?;

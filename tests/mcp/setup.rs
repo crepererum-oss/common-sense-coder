@@ -134,6 +134,20 @@ impl TestSetup {
         })
         .await
     }
+
+    pub(crate) async fn symbol_info_ok(&self, args: JsonObject) -> Vec<String> {
+        self.call_tool_ok(CallToolRequestParam {
+            name: "symbol_info".into(),
+            arguments: Some(args),
+        })
+        .await
+        .into_iter()
+        .map(|res| match res {
+            TextOrJson::Text(txt) => txt,
+            TextOrJson::Json(_) => panic!("expected non-JSON content"),
+        })
+        .collect()
+    }
 }
 
 #[derive(Debug, Serialize)]

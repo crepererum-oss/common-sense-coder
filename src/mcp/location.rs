@@ -32,6 +32,7 @@ impl LocationVariants {
                     .map(|loc| loc.to_string())
                     .unwrap_or_default()
             }
+            LocationVariants::Array(locations) if locations.is_empty() => "None".to_owned(),
             LocationVariants::Array(locations) => {
                 let locations = locations
                     .into_iter()
@@ -46,6 +47,9 @@ impl LocationVariants {
                     .map(|res| res.map(|loc| format!("- {loc}")))
                     .collect::<Result<Vec<_>, _>>()?;
                 locations.join("\n")
+            }
+            LocationVariants::Link(location_links) if location_links.is_empty() => {
+                "None".to_owned()
             }
             LocationVariants::Link(location_links) => {
                 let locations = location_links
