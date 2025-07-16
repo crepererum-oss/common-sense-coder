@@ -82,6 +82,7 @@ impl CodeExplorer {
                         partial_result_params: Default::default(),
                     })
                     .await
+                    .context("DocumentSymbolRequest")
                     .internal()?
                     .not_found(path)?;
 
@@ -103,6 +104,7 @@ impl CodeExplorer {
                         ..Default::default()
                     })
                     .await
+                    .context("WorkspaceSymbolRequest")
                     .internal()?
                     .not_found(query.clone())?;
 
@@ -203,6 +205,7 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("SemanticTokensFullRequest")
             .internal()?
             .not_found(path.clone())?;
         let file = tokio::fs::read_to_string(self.workspace.join(&path))
@@ -213,6 +216,7 @@ impl CodeExplorer {
             lsp_types::SemanticTokensResult::Tokens(semantic_tokens) => self
                 .token_legend
                 .decode(file, semantic_tokens.data)
+                .context("decode semantic tokens")
                 .internal()?,
             lsp_types::SemanticTokensResult::Partial(_) => {
                 return Err(McpError::internal_error(
