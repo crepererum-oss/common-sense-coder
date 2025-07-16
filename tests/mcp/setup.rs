@@ -7,142 +7,23 @@ use rmcp::{
     transport::TokioChildProcess,
 };
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use tempfile::TempDir;
 use tokio::process::Command;
 
+/// Path to the main binary.
 const BIN_PATH: &str = env!("CARGO_BIN_EXE_mcp-lsp-bridge");
 
-#[tokio::test]
-async fn test_find_symbol() {
-    let setup = TestSetup::new().await;
-
-    insta::assert_json_snapshot!(
-        setup.find_symbol_ok(map([
-            ("query", json!("does_not_exist")),
-        ])).await,
-        @"[]",
-    );
-
-    insta::assert_json_snapshot!(
-        setup.find_symbol_ok(map([
-            ("query", json!("my_lib_fn")),
-        ])).await,
-        @r#"
-    [
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 3,
-        "character": 8
-      }
-    ]
-    "#,
-    );
-
-    insta::assert_json_snapshot!(
-        setup.find_symbol_ok(map([
-            ("query", json!("my_lib_fn")),
-            ("workspace_and_dependencies", json!(true)),
-        ])).await,
-        @r#"
-    [
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "/fixtures/dependency_lib/src/lib.rs",
-        "line": 1,
-        "character": 8
-      },
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 3,
-        "character": 8
-      }
-    ]
-    "#,
-    );
-
-    insta::assert_json_snapshot!(
-        setup.find_symbol_ok(map([
-            ("query", json!("mylibfn")),
-        ])).await,
-        @"[]",
-    );
-
-    insta::assert_json_snapshot!(
-        setup.find_symbol_ok(map([
-            ("query", json!("mylibfn")),
-            ("workspace_and_dependencies", json!(true)),
-        ])).await,
-        @"[]",
-    );
-
-    insta::assert_json_snapshot!(
-        setup.find_symbol_ok(map([
-            ("query", json!("mylibfn")),
-            ("fuzzy", json!(true)),
-        ])).await,
-        @r#"
-    [
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 3,
-        "character": 8
-      }
-    ]
-    "#,
-    );
-
-    insta::assert_json_snapshot!(
-        setup.find_symbol_ok(map([
-            ("query", json!("mylibfn")),
-            ("fuzzy", json!(true)),
-            ("workspace_and_dependencies", json!(true)),
-        ])).await,
-        @r#"
-    [
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "/fixtures/dependency_lib/src/lib.rs",
-        "line": 1,
-        "character": 8
-      },
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 3,
-        "character": 8
-      }
-    ]
-    "#,
-    );
-}
-
+/// Temporary directory that holds IO interception data (like logs).
+///
+/// During a panic/test-failure it will NOT be cleaned up to simplify debugging.
+#[derive(Debug)]
 struct InterceptIoDir {
     dir: TempDir,
 }
 
 impl InterceptIoDir {
+    /// Create new, empty dir and print out location to stdout.
     fn new() -> Self {
         let dir = TempDir::new().expect("temp dir creation");
         println!("intercept IO: {}", dir.path().display());
@@ -165,7 +46,9 @@ impl Drop for InterceptIoDir {
     }
 }
 
-struct TestSetup {
+/// Test fixture that contains a running MCP server.
+#[derive(Debug)]
+pub(crate) struct TestSetup {
     fixtures_path: String,
 
     #[allow(dead_code)]
@@ -175,12 +58,14 @@ struct TestSetup {
 }
 
 impl TestSetup {
-    async fn new() -> Self {
+    pub(crate) async fn new() -> Self {
         let server_path = Path::new(BIN_PATH).canonicalize().expect("canonicalize");
 
         let fixtures_path = Path::new(file!())
             .parent()
-            .expect("parent")
+            .expect("parent 1")
+            .parent()
+            .expect("parent 2")
             .join("fixtures")
             .canonicalize()
             .expect("canonicalize");
@@ -242,7 +127,7 @@ impl TestSetup {
             .collect()
     }
 
-    async fn find_symbol_ok(&self, args: JsonObject) -> Vec<TextOrJson> {
+    pub(crate) async fn find_symbol_ok(&self, args: JsonObject) -> Vec<TextOrJson> {
         self.call_tool_ok(CallToolRequestParam {
             name: "find_symbol".into(),
             arguments: Some(args),
@@ -251,13 +136,9 @@ impl TestSetup {
     }
 }
 
-fn map<const N: usize>(m: [(&'static str, Value); N]) -> JsonObject {
-    m.into_iter().map(|(k, v)| (k.to_owned(), v)).collect()
-}
-
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-enum TextOrJson {
+pub(crate) enum TextOrJson {
     Text(String),
     Json(JsonObject),
 }
@@ -269,4 +150,8 @@ impl From<String> for TextOrJson {
             Err(_) => Self::Text(s),
         }
     }
+}
+
+pub(crate) fn map<const N: usize>(m: [(&'static str, Value); N]) -> JsonObject {
+    m.into_iter().map(|(k, v)| (k.to_owned(), v)).collect()
 }
