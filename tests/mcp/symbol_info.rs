@@ -71,9 +71,10 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Token Location:
+    Token:
 
-    src/lib.rs:4:5
+    - location: src/lib.rs:4:5
+    - type: namespace
 
     ---
 
@@ -126,9 +127,10 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Token Location:
+    Token:
 
-    src/lib.rs:6:8
+    - location: src/lib.rs:6:8
+    - type: function
 
     ---
 
@@ -181,9 +183,10 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Token Location:
+    Token:
 
-    src/lib.rs:11:4
+    - location: src/lib.rs:11:4
+    - type: function
 
     ---
 

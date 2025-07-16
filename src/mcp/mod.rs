@@ -21,6 +21,7 @@ use rmcp::{
     schemars, tool, tool_handler, tool_router,
 };
 use search::SearchMode;
+use tokens::DocumentQueryEntry;
 
 use crate::ProgressGuard;
 
@@ -225,7 +226,11 @@ impl CodeExplorer {
                 ));
             }
         };
-        let (line, character) = doc
+        let DocumentQueryEntry {
+            line,
+            character,
+            token_type,
+        } = doc
             .query(&name, line, character)
             .not_found("symbol".to_owned())?;
         let location = McpLocation {
@@ -235,7 +240,9 @@ impl CodeExplorer {
             workspace: self.workspace.clone(),
         };
 
-        let mut sections = vec![format!("Token Location:\n\n{location}")];
+        let mut sections = vec![format!(
+            "Token:\n\n- location: {location}\n- type: {token_type}"
+        )];
 
         let text_document_position_params = TextDocumentPositionParams::try_from(&location)?;
         let resp = client

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use lsp_types::{SemanticToken, SemanticTokensLegend};
 
@@ -34,13 +36,13 @@ impl TokenLegend {
                 start + delta_start
             };
 
-            let token_type = self
-                .legend
-                .token_types
-                .get(token_type as usize)
-                .with_context(|| format!("invalid token type: {token_type}"))?
-                .as_str()
-                .to_owned();
+            let token_type = TokenType::from(
+                self.legend
+                    .token_types
+                    .get(token_type as usize)
+                    .with_context(|| format!("invalid token type: {token_type}"))?
+                    .as_str(),
+            );
 
             let range = (start as usize)..((start + length) as usize);
             let data = lines
@@ -73,7 +75,7 @@ impl Document {
         name: &str,
         line: Option<u32>,
         character: Option<u32>,
-    ) -> Option<(u32, u32)> {
+    ) -> Option<DocumentQueryEntry> {
         self.tokens
             .iter()
             .filter(|token| token.data == name)
@@ -83,15 +85,40 @@ impl Document {
                     character.map(|character| character.abs_diff(token.start + 1)),
                 )
             })
-            .map(|token| (token.line + 1, token.start + 1))
+            .map(|token| DocumentQueryEntry {
+                line: token.line + 1,
+                character: token.start + 1,
+                token_type: token.token_type.clone(),
+            })
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct DocumentQueryEntry {
+    pub(crate) line: u32,
+    pub(crate) character: u32,
+    pub(crate) token_type: TokenType,
 }
 
 #[derive(Debug)]
 struct Token {
     line: u32,
     start: u32,
-    #[expect(dead_code)]
-    token_type: String,
+    token_type: TokenType,
     data: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TokenType(Arc<str>);
+
+impl std::fmt::Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_ref())
+    }
+}
+
+impl From<&str> for TokenType {
+    fn from(s: &str) -> Self {
+        Self(Arc::from(s))
+    }
 }
