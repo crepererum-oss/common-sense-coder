@@ -99,13 +99,15 @@ impl TestSetup {
             .arg("10")
             .arg("--workspace")
             .arg(main_lib_path)
-            .arg("-vv")
-            .stderr(server_stderr);
+            .arg("-vv");
 
-        let service =
-            ().serve(TokioChildProcess::new(cmd).expect("tokio child process spawn"))
-                .await
-                .expect("service start");
+        let child = TokioChildProcess::builder(cmd)
+            .stderr(server_stderr)
+            .spawn()
+            .expect("spawn language server")
+            .0;
+
+        let service = ().serve(child).await.expect("service start");
 
         Self {
             fixtures_path: fixtures_path.display().to_string(),
