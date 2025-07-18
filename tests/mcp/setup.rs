@@ -25,7 +25,12 @@ struct InterceptIoDir {
 impl InterceptIoDir {
     /// Create new, empty dir and print out location to stdout.
     fn new() -> Self {
-        let dir = TempDir::new().expect("temp dir creation");
+        let dir = if let Some(dir) = std::env::var_os("TEST_IO_INTERCEPT") {
+            std::fs::create_dir_all(&dir).expect("create IO intercept dir");
+            TempDir::with_prefix_in("", &dir).expect("temp dir creation")
+        } else {
+            TempDir::new().expect("temp dir creation")
+        };
         println!("intercept IO: {}", dir.path().display());
 
         Self { dir }
@@ -90,6 +95,8 @@ impl TestSetup {
             .env("RUST_BACKTRACE", "1")
             .arg("--intercept-io")
             .arg(intercept_io_dir.display().to_string())
+            .arg("--language-server-startup-delay-secs")
+            .arg("10")
             .arg("--workspace")
             .arg(main_lib_path)
             .arg("-vv")

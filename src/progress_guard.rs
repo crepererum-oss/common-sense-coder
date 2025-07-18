@@ -18,7 +18,11 @@ pub(crate) struct ProgressGuard {
 
 impl ProgressGuard {
     /// Start guard.
-    pub(crate) fn start(tasks: &mut JoinSet<Result<()>>, client: Arc<LspClient>) -> Self {
+    pub(crate) fn start(
+        tasks: &mut JoinSet<Result<()>>,
+        client: Arc<LspClient>,
+        startup_delay: Duration,
+    ) -> Self {
         let (tx, rx) = channel(Ready {
             init: false,
             progress: true,
@@ -29,7 +33,7 @@ impl ProgressGuard {
         let tx_captured = tx.clone();
         tasks.spawn(async move {
             debug!("wait for initial language server warm-up");
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            tokio::time::sleep(startup_delay).await;
             tx_captured.send_modify(|rdy| rdy.init = true);
             debug!("done waiting for initial language server warm-up");
 

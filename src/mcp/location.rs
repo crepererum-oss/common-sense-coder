@@ -165,7 +165,7 @@ impl TryFrom<&McpLocation> for TextDocumentPositionParams {
         } = loc;
 
         Ok(Self {
-            text_document: path_to_text_document_identifier(&workspace, &file)?,
+            text_document: path_to_text_document_identifier(workspace, file)?,
             position: Position {
                 line: line - 1,
                 character: character - 1,
