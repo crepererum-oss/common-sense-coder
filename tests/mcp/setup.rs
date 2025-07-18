@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use tokio::process::Command;
 
 /// Path to the main binary.
-const BIN_PATH: &str = env!("CARGO_BIN_EXE_mcp-lsp-bridge");
+const BIN_PATH: &str = env!("CARGO_BIN_EXE_common-sense-coder");
 
 /// Temporary directory that holds IO interception data (like logs).
 ///
