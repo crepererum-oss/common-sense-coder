@@ -1,0 +1,68 @@
+---
+name: CI
+
+# yamllint disable-line rule:truthy
+on:
+  merge_group:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+
+jobs:
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: yamllint
+        uses: ibiqlik/action-yamllint@2576378a8e339169678f9939646ee3ee325e845c  # v3.1.1
+        with:
+          strict: true
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install Toolchain
+        uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b  # master
+        with:
+          components: clippy, rust-analyzer, rustfmt
+          toolchain: stable
+
+      - name: Cache
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo check
+        run: cargo check --workspace --all-features
+
+      - name: cargo build
+        run: cargo build --workspace --all-features
+
+      - name: cargo clippy
+        run: cargo clippy --all-features --all-targets --workspace -- -D warnings
+
+      - name: cargo test
+        run: cargo test --all-features --workspace
+        env:
+          TEST_IO_INTERCEPT: intercept
+
+      - name: cargo doc
+        run: cargo doc --document-private-items --no-deps --all-features --workspace
+
+      - name: cargo bench
+        run: cargo bench --profile=dev --all-features --workspace -- --test
+
+      - name: upload logs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: always()
+        with:
+          name: IO interception
+          path: intercept

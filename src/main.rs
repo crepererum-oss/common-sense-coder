@@ -2,6 +2,7 @@ use std::{
     path::{Path, PathBuf},
     process::Stdio,
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{Context, Result};
@@ -35,6 +36,10 @@ struct Args {
     /// Dumps are stored in separate files in the provided directory.
     #[clap(long)]
     intercept_io: Option<PathBuf>,
+
+    /// Number of seconds to wait for the language server start up.
+    #[clap(long, default_value_t = 2)]
+    language_server_startup_delay_secs: u64,
 
     /// Logging config.
     #[clap(flatten)]
@@ -98,7 +103,11 @@ async fn main() -> Result<()> {
     let (tx, rx) = io_transport(stdin, stdout);
     let client = Arc::new(LspClient::new(tx, rx));
 
-    let progress_guard = ProgressGuard::start(&mut tasks, Arc::clone(&client));
+    let progress_guard = ProgressGuard::start(
+        &mut tasks,
+        Arc::clone(&client),
+        Duration::from_secs(args.language_server_startup_delay_secs),
+    );
 
     let (stdin, stdout) = stdio();
     let stdin = Box::pin(stdin) as BoxRead;

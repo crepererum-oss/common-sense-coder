@@ -146,10 +146,7 @@ impl CodeExplorer {
 
                 let kind = format!("{kind:?}");
 
-                let deprecated = tags
-                    .unwrap_or_default()
-                    .iter()
-                    .any(|tag| *tag == SymbolTag::DEPRECATED);
+                let deprecated = tags.unwrap_or_default().contains(&SymbolTag::DEPRECATED);
 
                 let McpLocation {
                     file,
