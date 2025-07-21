@@ -13,7 +13,10 @@ use lsp_types::{
 use serde_json::json;
 use tracing::info;
 
-use crate::mcp::TokenLegend;
+use crate::{
+    constants::{NAME, VERSION_STRING},
+    mcp::TokenLegend,
+};
 
 pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<TokenLegend> {
     info!("init LSP");
@@ -81,8 +84,8 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<Tok
                 ..Default::default()
             },
             client_info: Some(ClientInfo {
-                name: env!("CARGO_PKG_NAME").to_owned(),
-                version: Some(env!("CARGO_PKG_VERSION").to_owned()),
+                name: NAME.to_owned(),
+                version: Some(VERSION_STRING.to_owned()),
             }),
             initialization_options: Some(json!({
                 "files": {
