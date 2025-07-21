@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use anyhow::{Context, Result, bail, ensure};
 use lsp_client::LspClient;
@@ -10,15 +10,19 @@ use lsp_types::{
     TextDocumentClientCapabilities, TextDocumentSyncClientCapabilities, WindowClientCapabilities,
     WorkspaceClientCapabilities, WorkspaceFolder, WorkspaceSymbolClientCapabilities,
 };
-use serde_json::json;
 use tracing::info;
 
 use crate::{
     constants::{NAME, VERSION_STRING},
+    lang::ProgrammingLanguageQuirks,
     mcp::TokenLegend,
 };
 
-pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<TokenLegend> {
+pub(crate) async fn init_lsp(
+    client: &LspClient,
+    workspace: &Path,
+    quirks: &Arc<dyn ProgrammingLanguageQuirks>,
+) -> Result<TokenLegend> {
     info!("init LSP");
 
     let init_results = client
@@ -87,31 +91,7 @@ pub(crate) async fn init_lsp(client: &LspClient, workspace: &Path) -> Result<Tok
                 name: NAME.to_owned(),
                 version: Some(VERSION_STRING.to_owned()),
             }),
-            initialization_options: Some(json!({
-                "files": {
-                    "watcher": "server",
-                },
-                "hover": {
-                    "dropGlue": {
-                        "enable": false,
-                    },
-                    "memoryLayout": {
-                        "enable": false,
-                    },
-                    "show": {
-                        "enumVariants": 100,
-                        "fields": 100,
-                        "traitAssocItems": 100,
-                    },
-                },
-                "workspace": {
-                    "symbol": {
-                        "search": {
-                            "scope": "workspace_and_dependencies",
-                        },
-                    },
-                },
-            })),
+            initialization_options: quirks.initialization_options(),
             workspace_folders: Some(vec![WorkspaceFolder {
                 uri: format!("file://{}", workspace.display())
                     .parse()

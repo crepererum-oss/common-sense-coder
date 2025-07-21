@@ -276,7 +276,6 @@ dependencies = [
  "assert_cmd",
  "clap",
  "dotenvy",
- "futures",
  "insta",
  "lsp-client",
  "lsp-types",
