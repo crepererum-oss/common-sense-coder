@@ -10,6 +10,7 @@ use clap::Parser;
 use constants::{REVISION, VERSION, VERSION_STRING};
 use init::init_lsp;
 use io_intercept::{BoxRead, BoxWrite, ReadFork, WriteFork};
+use lang::{ProgrammingLanguage, ProgrammingLanguageQuirks};
 use logging::{LoggingCLIConfig, setup_logging};
 use lsp_client::{LspClient, transport::io_transport};
 use mcp::CodeExplorer;
@@ -34,6 +35,7 @@ use tempfile as _;
 mod constants;
 mod init;
 mod io_intercept;
+mod lang;
 mod logging;
 mod mcp;
 mod progress_guard;
@@ -61,6 +63,10 @@ struct Args {
         env = "COMMON_SENSE_CODER_LSP_STARTUP_DELAY"
     )]
     language_server_startup_delay_secs: u64,
+
+    /// Programming language.
+    #[clap(long, default_value = "rust")]
+    programming_language: ProgrammingLanguage,
 
     /// Logging config.
     #[clap(flatten)]
@@ -116,7 +122,9 @@ async fn main() -> Result<()> {
         Stdio::inherit()
     };
 
-    let mut child = Command::new("rust-analyzer")
+    let quirks = args.programming_language.quirks();
+
+    let mut child = Command::new(quirks.language_server())
         .current_dir(&args.workspace)
         .kill_on_drop(true)
         .stdin(Stdio::piped())
@@ -160,7 +168,7 @@ async fn main() -> Result<()> {
     };
 
     let mut res = tokio::select! {
-        res = main_inner(client, progress_guard, workspace, stdin, stdout) => {
+        res = main_inner(quirks, client, progress_guard, workspace, stdin, stdout) => {
             res.context("main")
         }
         res = tasks.join_next(), if !tasks.is_empty() => {
@@ -191,13 +199,16 @@ async fn main() -> Result<()> {
 }
 
 async fn main_inner(
+    quirks: Arc<dyn ProgrammingLanguageQuirks>,
     client: Arc<LspClient>,
     progress_guard: ProgressGuard,
     workspace: Arc<Path>,
     stdin: BoxRead,
     stdout: BoxWrite,
 ) -> Result<()> {
-    let token_legend = init_lsp(&client, &workspace).await.context("init lsp")?;
+    let token_legend = init_lsp(&client, &workspace, &quirks)
+        .await
+        .context("init lsp")?;
 
     let service = CodeExplorer::new(progress_guard, token_legend, workspace)
         .serve((stdin, stdout))
