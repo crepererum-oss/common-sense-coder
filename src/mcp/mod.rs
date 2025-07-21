@@ -234,7 +234,7 @@ impl CodeExplorer {
             file: path,
             line,
             character,
-            workspace: self.workspace.clone(),
+            workspace: Arc::clone(&self.workspace),
         };
 
         let mut sections = vec![format!(

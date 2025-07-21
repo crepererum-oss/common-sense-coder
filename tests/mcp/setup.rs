@@ -56,7 +56,7 @@ impl Drop for InterceptIoDir {
 pub(crate) struct TestSetup {
     fixtures_path: String,
 
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     intercept_io_dir: InterceptIoDir,
 
     service: RunningService<RoleClient, ()>,
