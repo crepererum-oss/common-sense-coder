@@ -2,7 +2,6 @@
 use anyhow as _;
 use clap as _;
 use dotenvy as _;
-use futures as _;
 use insta as _;
 use lsp_client as _;
 use lsp_types as _;

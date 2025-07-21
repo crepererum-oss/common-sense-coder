@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 use serde_json::json;
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::HashSet, fmt::Debug, sync::Arc};
 
 /// Code programming language.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -24,6 +24,9 @@ pub(crate) trait ProgrammingLanguageQuirks: Debug + Send + Sync + 'static {
 
     /// Language server initialization options.
     fn initialization_options(&self) -> Option<serde_json::Value>;
+
+    /// Set of progress reports that are expected before the language server is ready.
+    fn init_progress_parts(&self) -> HashSet<String>;
 }
 
 #[derive(Debug)]
@@ -60,5 +63,14 @@ impl ProgrammingLanguageQuirks for Rust {
                 },
             },
         }))
+    }
+
+    fn init_progress_parts(&self) -> HashSet<String> {
+        HashSet::from([
+            "rustAnalyzer/Building CrateGraph".to_owned(),
+            "rustAnalyzer/Roots Scanned".to_owned(),
+            "rustAnalyzer/cachePriming".to_owned(),
+            "rust-analyzer/flycheck/0".to_owned(),
+        ])
     }
 }

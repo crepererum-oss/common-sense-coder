@@ -102,8 +102,6 @@ impl TestSetup {
             .env("RUST_BACKTRACE", "1")
             .arg("--intercept-io")
             .arg(intercept_io_dir.display().to_string())
-            .arg("--language-server-startup-delay-secs")
-            .arg("10")
             .arg("--workspace")
             .arg(main_lib_path)
             .arg("-vv");

@@ -1,13 +1,15 @@
-use std::{collections::HashSet, ops::Deref, sync::Arc, time::Duration};
+use std::{collections::HashSet, ops::Deref, sync::Arc};
 
 use anyhow::{Context, Result, ensure};
 use lsp_client::LspClient;
-use lsp_types::{ProgressParamsValue, WorkDoneProgress, notification::Progress};
+use lsp_types::{NumberOrString, ProgressParamsValue, WorkDoneProgress, notification::Progress};
 use tokio::{
     sync::watch::{Receiver, channel},
     task::JoinSet,
 };
-use tracing::debug;
+use tracing::{debug, info};
+
+use crate::ProgrammingLanguageQuirks;
 
 /// Allows to wait for in-progress language server tasks.
 #[derive(Debug, Clone)]
@@ -20,8 +22,8 @@ impl ProgressGuard {
     /// Start guard.
     pub(crate) fn start(
         tasks: &mut JoinSet<Result<()>>,
+        quirks: &Arc<dyn ProgrammingLanguageQuirks>,
         client: Arc<LspClient>,
-        startup_delay: Duration,
     ) -> Self {
         let (tx, rx) = channel(Ready {
             init: false,
@@ -29,18 +31,8 @@ impl ProgressGuard {
         });
 
         // HACK: there doesn't seem to be a way to know what progress tokens
-        // to expect initially, so we just give the language server some time to hit us with a few
-        let tx_captured = tx.clone();
-        tasks.spawn(async move {
-            debug!("wait for initial language server warm-up");
-            tokio::time::sleep(startup_delay).await;
-            tx_captured.send_modify(|rdy| rdy.init = true);
-            debug!("done waiting for initial language server warm-up");
-
-            // never return
-            futures::future::pending::<()>().await;
-            Ok(())
-        });
+        // to expect initially, so we just have a hard-coded list
+        let mut init_parts = quirks.init_progress_parts();
 
         let client_captured = Arc::clone(&client);
         tasks.spawn(async move {
@@ -63,7 +55,10 @@ impl ProgressGuard {
                             "Progress double start: {:?}",
                             progress.token,
                         );
-                        debug!(phase="start", token=?progress.token, running=running.len(), "progress");
+                        if let NumberOrString::String(token) = &progress.token {
+                            init_parts.remove(token);
+                        }
+                        debug!(phase="start", token=?progress.token, running=running.len(), to_init=init_parts.len(), "progress");
                     }
                     WorkDoneProgress::Report(_) => {}
                     WorkDoneProgress::End(_) => {
@@ -72,15 +67,26 @@ impl ProgressGuard {
                             "Progress end without start: {:?}",
                             progress.token,
                         );
-                        debug!(phase="end", token=?progress.token, running=running.len(), "progress");
+                        debug!(phase="end", token=?progress.token, running=running.len(), to_init=init_parts.len(), "progress");
                     }
                 }
 
-                let new_ready = running.is_empty();
+                let new_rdy = Ready {
+                    init: init_parts.is_empty(),
+                    progress: running.is_empty(),
+                };
                 tx.send_if_modified(|rdy| {
-                    if rdy.progress != new_ready {
-                        rdy.progress = new_ready;
-                        debug!(ready=new_ready, "ready change");
+                    if rdy != &new_rdy {
+                        let flag_changed = rdy.ready() != new_rdy.ready();
+
+                        *rdy = new_rdy;
+
+                        if flag_changed {
+                            info!(progrss=rdy.progress, init=rdy.init, ready=rdy.ready(), "ready changed");
+                        } else {
+                            debug!(progrss=rdy.progress, init=rdy.init, ready=rdy.ready(), "ready changed");
+                        }
+
                         true
                     } else {
                         false
@@ -118,7 +124,7 @@ impl Deref for Guard<'_> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct Ready {
     init: bool,
     progress: bool,
