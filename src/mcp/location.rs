@@ -27,13 +27,13 @@ impl LocationVariants {
         workspace_and_dependencies: bool,
     ) -> Result<String, McpError> {
         Ok(match self {
-            LocationVariants::Scalar(location) => {
+            Self::Scalar(location) => {
                 McpLocation::try_new(location, workspace, workspace_and_dependencies)?
                     .map(|loc| loc.to_string())
                     .unwrap_or_default()
             }
-            LocationVariants::Array(locations) if locations.is_empty() => "None".to_owned(),
-            LocationVariants::Array(locations) => {
+            Self::Array(locations) if locations.is_empty() => "None".to_owned(),
+            Self::Array(locations) => {
                 let locations = locations
                     .into_iter()
                     .map(|loc| {
@@ -48,10 +48,8 @@ impl LocationVariants {
                     .collect::<Result<Vec<_>, _>>()?;
                 locations.join("\n")
             }
-            LocationVariants::Link(location_links) if location_links.is_empty() => {
-                "None".to_owned()
-            }
-            LocationVariants::Link(location_links) => {
+            Self::Link(location_links) if location_links.is_empty() => "None".to_owned(),
+            Self::Link(location_links) => {
                 let locations = location_links
                     .into_iter()
                     .map(|loc| {

@@ -18,8 +18,8 @@ pub(crate) enum SearchMode {
 impl SearchMode {
     pub(crate) fn check(self, query: &str, candidate: &str) -> bool {
         match self {
-            SearchMode::Exact => candidate == query,
-            SearchMode::Fuzzy => {
+            Self::Exact => candidate == query,
+            Self::Fuzzy => {
                 let mut name = candidate;
                 query.chars().all(|query_char| {
                     let m = name.match_indices(query_char).next();

@@ -23,6 +23,28 @@ insta = { version = "1.43.1", features = ["json"] }
 rmcp = { version = "0.3.0", features = ["client", "transport-child-process"] }
 tempfile = "3.20.0"
 
+[lints.rust]
+missing_copy_implementations = "deny"
+missing_debug_implementations = "deny"
+rust_2018_idioms = { level = "deny", priority = -1 }
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(tokio_unstable)'] }
+unreachable_pub = "deny"
+unused_crate_dependencies = "deny"
+
+[lints.clippy]
+clone_on_ref_ptr = "deny"
+dbg_macro = "deny"
+explicit_iter_loop = "deny"
+future_not_send = "deny"
+todo = "deny"
+use_self = "deny"
+allow_attributes = "warn"
+
+[lints.rustdoc]
+bare_urls = "deny"
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "allow"
+
 [profile.dev.package.insta]
 opt-level = 3
 

@@ -20,6 +20,12 @@ use tokio::{
 };
 use tracing::{info, warn};
 
+// used in integration tests
+#[cfg(test)]
+use insta as _;
+#[cfg(test)]
+use tempfile as _;
+
 mod init;
 mod io_intercept;
 mod logging;
