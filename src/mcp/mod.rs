@@ -17,13 +17,19 @@ use lsp_types::{
 use rmcp::{
     ServerHandler,
     handler::server::tool::{Parameters, ToolRouter},
-    model::{CallToolResult, Content, ErrorData as McpError, ServerCapabilities, ServerInfo},
+    model::{
+        CallToolResult, Content, ErrorData as McpError, Implementation, ServerCapabilities,
+        ServerInfo,
+    },
     schemars, tool, tool_handler, tool_router,
 };
 use search::SearchMode;
 use tokens::DocumentQueryEntry;
 
-use crate::ProgressGuard;
+use crate::{
+    ProgressGuard,
+    constants::{NAME, VERSION_STRING},
+};
 
 pub(crate) use tokens::TokenLegend;
 
@@ -434,9 +440,13 @@ fn empty_string_to_none(s: Option<String>) -> Option<String> {
 impl ServerHandler for CodeExplorer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
-            instructions: Some("A code exporer".into()),
+            protocol_version: Default::default(),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
+            server_info: Implementation {
+                name: NAME.to_owned(),
+                version: VERSION_STRING.to_owned(),
+            },
+            instructions: Some("A code exporer".into()),
         }
     }
 }

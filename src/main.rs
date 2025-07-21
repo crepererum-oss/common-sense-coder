@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use constants::{REVISION, VERSION, VERSION_STRING};
 use init::init_lsp;
 use io_intercept::{BoxRead, BoxWrite, ReadFork, WriteFork};
 use logging::{LoggingCLIConfig, setup_logging};
@@ -30,14 +31,12 @@ use predicates as _;
 #[cfg(test)]
 use tempfile as _;
 
+mod constants;
 mod init;
 mod io_intercept;
 mod logging;
 mod mcp;
 mod progress_guard;
-
-const REVISION: &str = env!("GIT_HASH");
-const VERSION_STRING: &str = concat!(env!("CARGO_PKG_VERSION"), ", revision ", env!("GIT_HASH"));
 
 /// Provides a "common sense" interface for a language model via Model Context Provider (MCP).
 ///
@@ -80,7 +79,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     setup_logging(args.logging_cfg).context("logging setup")?;
     info!(
-        version = env!("CARGO_PKG_VERSION"),
+        version = VERSION,
         revision = REVISION,
         dotenv_path = dotenv_path
             .as_ref()
