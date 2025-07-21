@@ -99,7 +99,7 @@ impl AsyncRead for ReadFork {
         let pos_pre = buf.capacity() - buf.remaining();
         self.inner.as_mut().poll_read(cx, buf).map_ok(|()| {
             self.tx
-                .send(Message::Data(buf.initialized()[pos_pre..].to_owned()))
+                .send(Message::Data(buf.filled()[pos_pre..].to_owned()))
                 .ok();
         })
     }
