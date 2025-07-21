@@ -24,7 +24,6 @@ use rmcp::{
     schemars, tool, tool_handler, tool_router,
 };
 use search::SearchMode;
-use tokens::DocumentQueryEntry;
 
 use crate::{
     ProgressGuard,
@@ -219,7 +218,7 @@ impl CodeExplorer {
         let doc = match resp {
             lsp_types::SemanticTokensResult::Tokens(semantic_tokens) => self
                 .token_legend
-                .decode(file, semantic_tokens.data)
+                .decode(&file, semantic_tokens.data)
                 .context("decode semantic tokens")
                 .internal()?,
             lsp_types::SemanticTokensResult::Partial(_) => {
@@ -229,22 +228,14 @@ impl CodeExplorer {
                 ));
             }
         };
-        let DocumentQueryEntry {
-            line,
-            character,
-            token_type,
-        } = doc
+        let token = doc
             .query(&name, line, character)
             .not_found("symbol".to_owned())?;
-        let location = McpLocation {
-            file: path,
-            line,
-            character,
-            workspace: Arc::clone(&self.workspace),
-        };
+        let location = token.location(path, Arc::clone(&self.workspace));
 
         let mut sections = vec![format!(
-            "Token:\n\n- location: {location}\n- type: {token_type}"
+            "Token:\n\n- location: {location}\n- type: {}",
+            token.token_type()
         )];
 
         let text_document_position_params = TextDocumentPositionParams::try_from(&location)?;
