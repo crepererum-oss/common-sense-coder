@@ -1,5 +1,6 @@
 use std::{ops::Deref, path::Path, process::Stdio};
 
+use assert_cmd::{cargo::cargo_bin, crate_name};
 use rmcp::{
     RoleClient,
     model::{CallToolRequestParam, JsonObject, RawContent},
@@ -10,9 +11,6 @@ use serde::Serialize;
 use serde_json::Value;
 use tempfile::TempDir;
 use tokio::process::Command;
-
-/// Path to the main binary.
-const BIN_PATH: &str = env!("CARGO_BIN_EXE_common-sense-coder");
 
 /// Temporary directory that holds IO interception data (like logs).
 ///
@@ -59,12 +57,17 @@ pub(crate) struct TestSetup {
     #[expect(dead_code)]
     intercept_io_dir: InterceptIoDir,
 
+    #[expect(dead_code)]
+    cwd: TempDir,
+
     service: RunningService<RoleClient, ()>,
 }
 
 impl TestSetup {
     pub(crate) async fn new() -> Self {
-        let server_path = Path::new(BIN_PATH).canonicalize().expect("canonicalize");
+        let server_path = cargo_bin(crate_name!())
+            .canonicalize()
+            .expect("canonicalize");
 
         let fixtures_path = Path::new(file!())
             .parent()
@@ -90,8 +93,12 @@ impl TestSetup {
                 .await,
         );
 
+        // add a cwd to avoid dependency on it
+        let cwd = TempDir::new().expect("create CWD temp dir");
+
         let mut cmd = Command::new(server_path);
         cmd.env("RA_LOG", "info")
+            .current_dir(cwd.path())
             .env("RUST_BACKTRACE", "1")
             .arg("--intercept-io")
             .arg(intercept_io_dir.display().to_string())
@@ -112,6 +119,7 @@ impl TestSetup {
         Self {
             fixtures_path: fixtures_path.display().to_string(),
             intercept_io_dir,
+            cwd,
             service,
         }
     }
