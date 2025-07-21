@@ -12,7 +12,11 @@ pub(crate) struct LoggingCLIConfig {
     /// Log filter.
     ///
     /// Conflicts with `-v`/`--verbose`.
-    #[clap(conflicts_with = "log_verbose_count", long, action)]
+    #[clap(
+        conflicts_with = "log_verbose_count",
+        long,
+        env = "COMMON_SENSE_CODER_LOGGING_FILTER"
+    )]
     log_filter: Option<String>,
 
     /// Verbose logs.

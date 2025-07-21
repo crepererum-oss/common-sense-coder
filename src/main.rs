@@ -22,7 +22,11 @@ use tracing::{info, warn};
 
 // used in integration tests
 #[cfg(test)]
+use assert_cmd as _;
+#[cfg(test)]
 use insta as _;
+#[cfg(test)]
+use predicates as _;
 #[cfg(test)]
 use tempfile as _;
 
@@ -32,19 +36,31 @@ mod logging;
 mod mcp;
 mod progress_guard;
 
+const REVISION: &str = env!("GIT_HASH");
+const VERSION_STRING: &str = concat!(env!("CARGO_PKG_VERSION"), ", revision ", env!("GIT_HASH"));
+
+/// Provides a "common sense" interface for a language model via Model Context Provider (MCP).
+///
+/// The data is retrieved from a language server (via LSP).
 #[derive(Debug, Parser)]
+#[command(version = VERSION_STRING)]
 struct Args {
-    #[clap(long)]
+    /// Workspace location, i.e. the root of the project.
+    #[clap(long, env = "COMMON_SENSE_CODER_WORKSPACE")]
     workspace: PathBuf,
 
     /// Intercept IO to/from language server and MCP client for debugging.
     ///
     /// Dumps are stored in separate files in the provided directory.
-    #[clap(long)]
+    #[clap(long, env = "COMMON_SENSE_CODER_INTERCEPT_IO")]
     intercept_io: Option<PathBuf>,
 
     /// Number of seconds to wait for the language server start up.
-    #[clap(long, default_value_t = 2)]
+    #[clap(
+        long,
+        default_value_t = 2,
+        env = "COMMON_SENSE_CODER_LSP_STARTUP_DELAY"
+    )]
     language_server_startup_delay_secs: u64,
 
     /// Logging config.
@@ -54,8 +70,23 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let dotenv_path = match dotenvy::dotenv() {
+        Ok(path) => Some(path),
+        Err(e) if e.not_found() => None,
+        Err(e) => {
+            return Err(e).context("load dotenv");
+        }
+    };
     let args = Args::parse();
     setup_logging(args.logging_cfg).context("logging setup")?;
+    info!(
+        version = env!("CARGO_PKG_VERSION"),
+        revision = REVISION,
+        dotenv_path = dotenv_path
+            .as_ref()
+            .map(|p| tracing::field::display(p.display())),
+        "start common sense coder"
+    );
 
     let mut tasks = JoinSet::new();
 
