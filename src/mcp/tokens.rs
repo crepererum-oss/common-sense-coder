@@ -8,6 +8,7 @@ use super::location::McpLocation;
 #[derive(Debug)]
 pub(crate) struct TokenLegend {
     token_types: Vec<TokenType>,
+    token_modifiers: Vec<TokenModifier>,
 }
 
 impl TokenLegend {
@@ -17,6 +18,11 @@ impl TokenLegend {
                 .token_types
                 .into_iter()
                 .map(|t| TokenType(t.as_str().to_owned()))
+                .collect(),
+            token_modifiers: legend
+                .token_modifiers
+                .into_iter()
+                .map(|t| TokenModifier(t.as_str().to_owned()))
                 .collect(),
         }
     }
@@ -38,7 +44,7 @@ impl TokenLegend {
                 delta_start,
                 length,
                 token_type,
-                token_modifiers_bitset: _,
+                token_modifiers_bitset,
             } = token;
 
             line += delta_line;
@@ -64,6 +70,10 @@ impl TokenLegend {
                 line: line + 1,
                 character: start + 1,
                 token_type,
+                token_modifiers: TokenModifers {
+                    legend: &self.token_modifiers,
+                    bitset: token_modifiers_bitset,
+                },
                 data,
             })
         }
@@ -107,6 +117,9 @@ pub(crate) struct Token<'a> {
     /// Token type.
     token_type: &'a TokenType,
 
+    /// Token modifiers.
+    token_modifiers: TokenModifers<'a>,
+
     /// Text data of the token.
     data: &'a str,
 }
@@ -124,6 +137,10 @@ impl Token<'_> {
     pub(crate) fn token_type(&self) -> &TokenType {
         self.token_type
     }
+
+    pub(crate) fn token_modifers(&self) -> TokenModifers<'_> {
+        self.token_modifiers
+    }
 }
 
 #[derive(Debug)]
@@ -132,5 +149,117 @@ pub(crate) struct TokenType(String);
 impl std::fmt::Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct TokenModifier(String);
+
+impl std::fmt::Display for TokenModifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TokenModifers<'a> {
+    legend: &'a [TokenModifier],
+    bitset: u32,
+}
+
+impl TokenModifers<'_> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &TokenModifier> {
+        self.legend
+            .iter()
+            .zip(BitIter::new(self.bitset))
+            .filter(|(_modifier, bit)| *bit)
+            .map(|(modifier, _bit)| modifier)
+    }
+}
+
+#[derive(Debug)]
+struct BitIter {
+    bitset_remaining: u32,
+}
+
+impl BitIter {
+    fn new(bitset: u32) -> Self {
+        Self {
+            bitset_remaining: bitset,
+        }
+    }
+}
+
+impl Iterator for BitIter {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.bitset_remaining == 0 {
+            return None;
+        }
+
+        let found_bit = (self.bitset_remaining & 1) != 0;
+        self.bitset_remaining >>= 1;
+        Some(found_bit)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let h = u32::BITS - self.bitset_remaining.leading_zeros();
+        let h = h as usize;
+        (h, Some(h))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_bit_iter() {
+        let mut it = BitIter::new(0);
+        assert_eq!(it.size_hint(), (0, Some(0)));
+        assert_eq!(it.next(), None);
+
+        let mut it = BitIter::new(1);
+        assert_eq!(it.size_hint(), (1, Some(1)));
+        assert_eq!(it.next(), Some(true));
+        assert_eq!(it.size_hint(), (0, Some(0)));
+        assert_eq!(it.next(), None);
+
+        let mut it = BitIter::new(2);
+        assert_eq!(it.size_hint(), (2, Some(2)));
+        assert_eq!(it.next(), Some(false));
+        assert_eq!(it.size_hint(), (1, Some(1)));
+        assert_eq!(it.next(), Some(true));
+        assert_eq!(it.size_hint(), (0, Some(0)));
+        assert_eq!(it.next(), None);
+
+        let mut it = BitIter::new(3);
+        assert_eq!(it.size_hint(), (2, Some(2)));
+        assert_eq!(it.next(), Some(true));
+        assert_eq!(it.size_hint(), (1, Some(1)));
+        assert_eq!(it.next(), Some(true));
+        assert_eq!(it.size_hint(), (0, Some(0)));
+        assert_eq!(it.next(), None);
+
+        let mut it = BitIter::new(4);
+        assert_eq!(it.size_hint(), (3, Some(3)));
+        assert_eq!(it.next(), Some(false));
+        assert_eq!(it.size_hint(), (2, Some(2)));
+        assert_eq!(it.next(), Some(false));
+        assert_eq!(it.size_hint(), (1, Some(1)));
+        assert_eq!(it.next(), Some(true));
+        assert_eq!(it.size_hint(), (0, Some(0)));
+        assert_eq!(it.next(), None);
+
+        let mut it = BitIter::new(5);
+        assert_eq!(it.size_hint(), (3, Some(3)));
+        assert_eq!(it.next(), Some(true));
+        assert_eq!(it.size_hint(), (2, Some(2)));
+        assert_eq!(it.next(), Some(false));
+        assert_eq!(it.size_hint(), (1, Some(1)));
+        assert_eq!(it.next(), Some(true));
+        assert_eq!(it.size_hint(), (0, Some(0)));
+        assert_eq!(it.next(), None);
     }
 }

@@ -3,6 +3,7 @@ use anyhow as _;
 use clap as _;
 use dotenvy as _;
 use insta as _;
+use itertools as _;
 use lsp_client as _;
 use lsp_types as _;
 use rmcp as _;
