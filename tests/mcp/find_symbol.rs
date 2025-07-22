@@ -84,6 +84,39 @@ async fn test_global_query() {
 }
 
 #[tokio::test]
+async fn test_fallback_to_global_query() {
+    let setup = TestSetup::new().await;
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("my_unused_lib_fn")),
+        ])).await,
+        @r#"
+    [
+      {
+        "type": "json",
+        "name": "my_unused_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "/fixtures/dependency_lib/src/lib.rs",
+        "line": 5,
+        "character": 8
+      }
+    ]
+    "#,
+    );
+
+    // does NOT fall back if scope is explicitely local
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("my_unused_lib_fn")),
+            ("workspace_and_dependencies", json!(false)),
+        ])).await,
+        @"[]",
+    );
+}
+
+#[tokio::test]
 async fn test_workspace_fuzzy_query() {
     let setup = TestSetup::new().await;
 
@@ -173,6 +206,15 @@ async fn test_global_fuzzy_query() {
         "file": "src/lib.rs",
         "line": 1,
         "character": 17
+      },
+      {
+        "type": "json",
+        "name": "my_unused_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "/fixtures/dependency_lib/src/lib.rs",
+        "line": 5,
+        "character": 8
       }
     ]
     "#,

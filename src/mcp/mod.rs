@@ -29,7 +29,7 @@ use rmcp::{
 };
 use search::SearchMode;
 use tokio_stream::StreamExt;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::{
     ProgressGuard,
@@ -105,7 +105,7 @@ impl CodeExplorer {
             query,
             path,
             fuzzy,
-            workspace_and_dependencies,
+            workspace_and_dependencies: workspace_and_dependencies_orig,
         }): Parameters<FindSymbolRequest>,
         ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
@@ -114,7 +114,7 @@ impl CodeExplorer {
         let query = empty_string_to_none(query);
         let path = empty_string_to_none(path);
         let fuzzy = fuzzy.unwrap_or_default();
-        let workspace_and_dependencies = workspace_and_dependencies.unwrap_or_default();
+        let workspace_and_dependencies = workspace_and_dependencies_orig.unwrap_or_default();
 
         let symbol_informations = match path {
             Some(path) => {
@@ -172,12 +172,40 @@ impl CodeExplorer {
         } else {
             SearchMode::Exact
         };
-        let response = symbol_informations
+        let mut results = self.filter_symbol_informations(
+            &symbol_informations,
+            query.as_deref(),
+            mode,
+            workspace_and_dependencies,
+        )?;
+        if results.is_empty() && workspace_and_dependencies_orig.is_none() {
+            debug!("auto-expand scope to workspace_and_dependencies");
+            results = self.filter_symbol_informations(
+                &symbol_informations,
+                query.as_deref(),
+                mode,
+                true,
+            )?;
+        }
+        let results = results
             .into_iter()
+            .map(Content::json)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(CallToolResult::success(results))
+    }
+
+    fn filter_symbol_informations(
+        &self,
+        symbol_informations: &[SymbolInformation],
+        query: Option<&str>,
+        mode: SearchMode,
+        workspace_and_dependencies: bool,
+    ) -> Result<Vec<SymbolResult>, McpError> {
+        symbol_informations
+            .iter()
             // rust-analyzer search is fuzzy by default
             .filter(|si| {
                 query
-                    .as_deref()
                     .map(|query| (mode.check(query, &si.name)))
                     .unwrap_or(true)
             })
@@ -192,7 +220,10 @@ impl CodeExplorer {
 
                 let kind = format!("{kind:?}");
 
-                let deprecated = tags.unwrap_or_default().contains(&SymbolTag::DEPRECATED);
+                let deprecated = tags
+                    .as_ref()
+                    .map(|tags| tags.contains(&SymbolTag::DEPRECATED))
+                    .unwrap_or_default();
 
                 let McpLocation {
                     file,
@@ -200,7 +231,7 @@ impl CodeExplorer {
                     character,
                     workspace: _,
                 } = match McpLocation::try_new(
-                    location,
+                    location.clone(),
                     Arc::clone(&self.workspace),
                     workspace_and_dependencies,
                 )
@@ -213,21 +244,17 @@ impl CodeExplorer {
                     }
                 };
 
-                let sr = SymbolResult {
-                    name,
+                Ok(Some(SymbolResult {
+                    name: name.to_owned(),
                     kind,
                     deprecated,
                     file,
                     line,
                     character,
-                };
-                let content = Content::json(sr)?;
-                Ok(Some(content))
+                }))
             })
             .filter_map(Result::transpose)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(CallToolResult::success(response))
+            .collect::<Result<Vec<_>, _>>()
     }
 
     #[tool(description = "get information to given symbol")]
