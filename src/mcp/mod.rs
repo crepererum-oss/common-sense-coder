@@ -2,6 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use anyhow::Context;
 use error::{OptionExt, ResultExt};
+use itertools::Itertools;
 use location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri};
 use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, HoverContents, HoverParams,
@@ -24,7 +25,6 @@ use rmcp::{
     schemars, tool, tool_handler, tool_router,
 };
 use search::SearchMode;
-use tokens::DocumentQueryEntry;
 
 use crate::{
     ProgressGuard,
@@ -219,7 +219,7 @@ impl CodeExplorer {
         let doc = match resp {
             lsp_types::SemanticTokensResult::Tokens(semantic_tokens) => self
                 .token_legend
-                .decode(file, semantic_tokens.data)
+                .decode(&file, semantic_tokens.data)
                 .context("decode semantic tokens")
                 .internal()?,
             lsp_types::SemanticTokensResult::Partial(_) => {
@@ -229,22 +229,19 @@ impl CodeExplorer {
                 ));
             }
         };
-        let DocumentQueryEntry {
-            line,
-            character,
-            token_type,
-        } = doc
+        let token = doc
             .query(&name, line, character)
             .not_found("symbol".to_owned())?;
-        let location = McpLocation {
-            file: path,
-            line,
-            character,
-            workspace: Arc::clone(&self.workspace),
-        };
+        let location = token.location(path, Arc::clone(&self.workspace));
 
         let mut sections = vec![format!(
-            "Token:\n\n- location: {location}\n- type: {token_type}"
+            "Token:\n\n- location: {location}\n- type: {}\n- modifiers: {}",
+            token.token_type(),
+            token
+                .token_modifers()
+                .iter()
+                .map(|m| m.to_string())
+                .join(", "),
         )];
 
         let text_document_position_params = TextDocumentPositionParams::try_from(&location)?;
@@ -265,7 +262,7 @@ impl CodeExplorer {
                 .into_iter()
                 .map(format_marked_string)
                 .collect(),
-            HoverContents::Markup(markup_content) => vec![markup_content.value],
+            HoverContents::Markup(markup_content) => vec![markup_content.value.trim().to_owned()],
         });
 
         if let Some(resp) = client
@@ -278,7 +275,7 @@ impl CodeExplorer {
             .internal()?
         {
             sections.push(format!(
-                "Declaration:\n\n{}",
+                "Declaration:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
             ))
@@ -294,7 +291,7 @@ impl CodeExplorer {
             .internal()?
         {
             sections.push(format!(
-                "Definition:\n\n{}",
+                "Definition:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
             ))
@@ -310,7 +307,7 @@ impl CodeExplorer {
             .internal()?
         {
             sections.push(format!(
-                "Implementation:\n\n{}",
+                "Implementation:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
             ))
@@ -326,7 +323,7 @@ impl CodeExplorer {
             .internal()?
         {
             sections.push(format!(
-                "Type Definition:\n\n{}",
+                "Type Definition:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
             ))
@@ -362,7 +359,7 @@ impl CodeExplorer {
             } else {
                 locations.join("\n")
             };
-            sections.push(format!("References:\n\n{locations}"))
+            sections.push(format!("References:\n{locations}"))
         }
 
         Ok(CallToolResult::success(vec![Content::text(
@@ -425,7 +422,7 @@ struct SymbolInfoRequest {
 
 fn format_marked_string(s: MarkedString) -> String {
     match s {
-        MarkedString::String(s) => s,
+        MarkedString::String(s) => s.trim().to_owned(),
         MarkedString::LanguageString(LanguageString { language, value }) => {
             format!("```{language}\n{value}\n```\n")
         }

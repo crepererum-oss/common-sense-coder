@@ -75,9 +75,9 @@ async fn test_info_for_all_in_file() {
 
     - location: src/lib.rs:4:5
     - type: namespace
+    - modifiers: declaration
 
     ---
-
 
     ```rust
     main_lib
@@ -90,31 +90,26 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declaration:
-
     - src/lib.rs:4:5
 
     ---
 
     Definition:
-
     - src/sub.rs:1:1
 
     ---
 
     Implementation:
-
     None
 
     ---
 
     Type Definition:
-
     None
 
     ---
 
     References:
-
     - src/lib.rs:1:12
 
     ==========
@@ -131,9 +126,9 @@ async fn test_info_for_all_in_file() {
 
     - location: src/lib.rs:6:8
     - type: function
+    - modifiers: declaration, public
 
     ---
-
 
     ```rust
     main_lib
@@ -146,31 +141,26 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declaration:
-
     - src/lib.rs:6:8
 
     ---
 
     Definition:
-
     - src/lib.rs:6:8
 
     ---
 
     Implementation:
-
     None
 
     ---
 
     Type Definition:
-
     None
 
     ---
 
     References:
-
     None
 
     ==========
@@ -187,9 +177,9 @@ async fn test_info_for_all_in_file() {
 
     - location: src/lib.rs:11:4
     - type: function
+    - modifiers: declaration
 
     ---
-
 
     ```rust
     main_lib
@@ -206,31 +196,26 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declaration:
-
     - src/lib.rs:11:4
 
     ---
 
     Definition:
-
     - src/lib.rs:11:4
 
     ---
 
     Implementation:
-
     None
 
     ---
 
     Type Definition:
-
     None
 
     ---
 
     References:
-
     - src/lib.rs:7:64
     ");
 }
