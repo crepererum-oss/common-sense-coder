@@ -372,7 +372,7 @@ async fn test_multi_match() {
     let results = setup
         .symbol_info_ok(map([("path", json!(path)), ("name", json!("accu"))]))
         .await;
-    let results = results.join(&format!("\n{RESULT_SEP}\n"));
+    let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
     insta::assert_snapshot!(results, @r"
     Token:
 
@@ -410,5 +410,200 @@ async fn test_multi_match() {
 
     References:
     - src/lib.rs:8:16
+
+    ==========
+
+    Token:
+
+    - location: src/lib.rs:8:9
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:8:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:8:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:9:16
+
+    ==========
+
+    Token:
+
+    - location: src/lib.rs:8:16
+    - type: variable
+    - modifiers: 
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:7:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:7:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:8:16
+
+    ==========
+
+    Token:
+
+    - location: src/lib.rs:9:9
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:9:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:9:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:10:5
+
+    ==========
+
+    Token:
+
+    - location: src/lib.rs:9:16
+    - type: variable
+    - modifiers: 
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:8:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:8:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:9:16
+
+    ==========
+
+    Token:
+
+    - location: src/lib.rs:10:5
+    - type: variable
+    - modifiers: 
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:9:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:9:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:10:5
     ");
 }

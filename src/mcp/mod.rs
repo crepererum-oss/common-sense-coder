@@ -3,6 +3,7 @@ use std::{path::Path, sync::Arc};
 use anyhow::Context;
 use error::{OptionExt, ResultExt};
 use itertools::Itertools;
+use lsp_client::LspClient;
 use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, HoverContents, HoverParams,
     LanguageString, MarkedString, ReferenceContext, ReferenceParams, SemanticTokensParams,
@@ -30,7 +31,7 @@ use crate::{
     constants::{NAME, VERSION_STRING},
     lsp::{
         location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri},
-        tokens::TokenLegend,
+        tokens::{Token, TokenLegend},
     },
 };
 
@@ -235,10 +236,26 @@ impl CodeExplorer {
                 ));
             }
         };
-        let token = doc
-            .query(&name, line, character)
-            .not_found("symbol".to_owned())?;
-        let location = token.location(path, Arc::clone(&self.workspace));
+        let tokens = doc.query(&name, line, character);
+        let mut results = vec![];
+        for token in tokens {
+            results.push(Content::text(
+                self.symbol_info_for_token(token, &path, &client, workspace_and_dependencies)
+                    .await?,
+            ));
+        }
+
+        Ok(CallToolResult::success(results))
+    }
+
+    async fn symbol_info_for_token(
+        &self,
+        token: &Token<'_>,
+        path: &str,
+        client: &LspClient,
+        workspace_and_dependencies: bool,
+    ) -> Result<String, McpError> {
+        let location = token.location(path.to_owned(), Arc::clone(&self.workspace));
 
         let mut sections = vec![format!(
             "Token:\n\n- location: {location}\n- type: {}\n- modifiers: {}",
@@ -375,12 +392,10 @@ impl CodeExplorer {
             } else {
                 locations.join("\n")
             };
-            sections.push(format!("References:\n{locations}"))
+            sections.push(format!("References:\n{locations}"));
         }
 
-        Ok(CallToolResult::success(vec![Content::text(
-            sections.join("\n\n---\n\n"),
-        )]))
+        Ok(sections.join("\n\n---\n\n"))
     }
 }
 

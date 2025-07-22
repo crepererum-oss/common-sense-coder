@@ -1,6 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
+use itertools::Itertools;
 use lsp_types::{SemanticToken, SemanticTokensLegend};
 
 use super::location::McpLocation;
@@ -93,11 +94,11 @@ impl<'legend> Document<'legend> {
         name: &str,
         line: Option<u32>,
         character: Option<u32>,
-    ) -> Option<&Token<'legend>> {
+    ) -> Vec<&Token<'legend>> {
         self.tokens
             .iter()
             .filter(|token| token.data == name)
-            .min_by_key(|token| {
+            .min_set_by_key(|token| {
                 (
                     line.map(|line| line.abs_diff(token.line)),
                     character.map(|character| character.abs_diff(token.character)),
