@@ -4,14 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::Context;
+use anyhow::{Context, Error, Result};
 use lsp_types::{
     GotoDefinitionResponse, Location, LocationLink, Position, TextDocumentIdentifier,
     TextDocumentPositionParams, Uri,
 };
-use rmcp::model::ErrorData as McpError;
-
-use super::error::ResultExt;
 
 #[derive(Debug)]
 pub(crate) enum LocationVariants {
@@ -25,7 +22,7 @@ impl LocationVariants {
         self,
         workspace: Arc<Path>,
         workspace_and_dependencies: bool,
-    ) -> Result<String, McpError> {
+    ) -> Result<String> {
         Ok(match self {
             Self::Scalar(location) => {
                 McpLocation::try_new(location, workspace, workspace_and_dependencies)?
@@ -45,7 +42,8 @@ impl LocationVariants {
                     })
                     .filter_map(Result::transpose)
                     .map(|res| res.map(|loc| format!("- {loc}")))
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()
+                    .context("format locations")?;
                 locations.join("\n")
             }
             Self::Link(location_links) if location_links.is_empty() => "None".to_owned(),
@@ -61,7 +59,8 @@ impl LocationVariants {
                     })
                     .filter_map(Result::transpose)
                     .map(|res| res.map(|loc| format!("- {loc}")))
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()
+                    .context("format locations")?;
                 locations.join("\n")
             }
         })
@@ -91,14 +90,12 @@ impl McpLocation {
         loc: Location,
         workspace: Arc<Path>,
         workspace_and_dependencies: bool,
-    ) -> Result<Option<Self>, McpError> {
+    ) -> Result<Option<Self>> {
         let Location { uri, range } = loc;
 
         let path = uri.path();
         let file = if path.is_absolute() {
-            let path = PathBuf::from_str(path.as_str())
-                .context("parse URI as path")
-                .internal()?;
+            let path = PathBuf::from_str(path.as_str()).context("parse URI as path")?;
 
             // try to make it relative to the workspace root
             match (path.strip_prefix(&workspace), workspace_and_dependencies) {
@@ -133,7 +130,7 @@ impl McpLocation {
         loc: LocationLink,
         workspace: Arc<Path>,
         workspace_and_dependencies: bool,
-    ) -> Result<Option<Self>, McpError> {
+    ) -> Result<Option<Self>> {
         let loc = Location::new(loc.target_uri, loc.target_range);
         Self::try_new(loc, workspace, workspace_and_dependencies)
     }
@@ -152,7 +149,7 @@ impl std::fmt::Display for McpLocation {
 }
 
 impl TryFrom<&McpLocation> for TextDocumentPositionParams {
-    type Error = McpError;
+    type Error = Error;
 
     fn try_from(loc: &McpLocation) -> Result<Self, Self::Error> {
         let McpLocation {
@@ -172,7 +169,7 @@ impl TryFrom<&McpLocation> for TextDocumentPositionParams {
     }
 }
 
-pub(crate) fn path_to_uri(workspace: &Path, path: &str) -> Result<Uri, McpError> {
+pub(crate) fn path_to_uri(workspace: &Path, path: &str) -> Result<Uri> {
     // prefix relative paths with workspace
     let path = if path.starts_with("/") {
         path
@@ -180,13 +177,13 @@ pub(crate) fn path_to_uri(workspace: &Path, path: &str) -> Result<Uri, McpError>
         &format!("{}/{path}", workspace.display())
     };
 
-    format!("file://{path}").parse().internal()
+    format!("file://{path}").parse().context("parse file URI")
 }
 
 pub(crate) fn path_to_text_document_identifier(
     workspace: &Path,
     path: &str,
-) -> Result<TextDocumentIdentifier, McpError> {
+) -> Result<TextDocumentIdentifier> {
     Ok(TextDocumentIdentifier {
         uri: path_to_uri(workspace, path)?,
     })
