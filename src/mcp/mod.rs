@@ -20,13 +20,15 @@ use rmcp::{
     handler::server::tool::{Parameters, ToolCallContext, ToolRouter},
     model::{
         CallToolRequestParam, CallToolResult, Content, ErrorData as McpError, Implementation,
-        ListToolsResult, PaginatedRequestParam, ServerCapabilities, ServerInfo,
+        ListToolsResult, PaginatedRequestParam, ProgressNotificationParam, ServerCapabilities,
+        ServerInfo,
     },
     schemars,
     service::RequestContext,
     tool, tool_router,
 };
 use search::SearchMode;
+use tokio_stream::StreamExt;
 use tracing::info;
 
 use crate::{
@@ -34,6 +36,7 @@ use crate::{
     constants::{NAME, VERSION_STRING},
     lsp::{
         location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri},
+        progress_guard::Guard,
         tokens::{Token, TokenLegend},
     },
 };
@@ -64,6 +67,37 @@ impl CodeExplorer {
         }
     }
 
+    async fn wait_for_client(&self, ctx: RequestContext<RoleServer>) -> Guard<'_> {
+        let fut_progress = async {
+            if let Some(progress_token) = ctx.meta.get_progress_token() {
+                let mut stream_evt = self.progress_guard.events();
+                let mut progress = 0;
+
+                while let Some(evt) = stream_evt.next().await {
+                    ctx.peer
+                        .notify_progress(ProgressNotificationParam {
+                            progress_token: progress_token.clone(),
+                            progress,
+                            total: None,
+                            message: Some(evt),
+                        })
+                        .await
+                        .ok();
+                    progress += 1;
+                }
+
+                futures::future::pending::<()>().await
+            }
+        };
+
+        let fut_wait = async { self.progress_guard.wait().await };
+
+        tokio::select! {
+            _ = fut_progress => unreachable!(),
+            guard = fut_wait => guard,
+        }
+    }
+
     #[tool(description = "find symbol (e.g. a struct, enum, method, ...) in code base")]
     async fn find_symbol(
         &self,
@@ -73,8 +107,9 @@ impl CodeExplorer {
             fuzzy,
             workspace_and_dependencies,
         }): Parameters<FindSymbolRequest>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let client = self.progress_guard.wait().await;
+        let client = self.wait_for_client(ctx).await;
 
         let query = empty_string_to_none(query);
         let path = empty_string_to_none(path);
@@ -205,8 +240,9 @@ impl CodeExplorer {
             character,
             workspace_and_dependencies,
         }): Parameters<SymbolInfoRequest>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let client = self.progress_guard.wait().await;
+        let client = self.wait_for_client(ctx).await;
 
         let workspace_and_dependencies = workspace_and_dependencies.unwrap_or_default();
 
