@@ -456,7 +456,7 @@ async fn test_multi_match() {
 
     - location: src/lib.rs:8:16
     - type: variable
-    - modifiers: 
+    - modifiers: none
 
     ---
 
@@ -534,7 +534,7 @@ async fn test_multi_match() {
 
     - location: src/lib.rs:9:16
     - type: variable
-    - modifiers: 
+    - modifiers: none
 
     ---
 
@@ -573,7 +573,7 @@ async fn test_multi_match() {
 
     - location: src/lib.rs:10:5
     - type: variable
-    - modifiers: 
+    - modifiers: none
 
     ---
 

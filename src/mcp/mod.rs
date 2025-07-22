@@ -260,14 +260,21 @@ impl CodeExplorer {
     ) -> Result<String, McpError> {
         let location = token.location(path.to_owned(), Arc::clone(&self.workspace));
 
+        let modifiers = token
+            .token_modifers()
+            .iter()
+            .map(|m| m.to_string())
+            .join(", ");
+        let modifiers = if modifiers.is_empty() {
+            "none".to_owned()
+        } else {
+            modifiers
+        };
+
         let mut sections = vec![format!(
             "Token:\n\n- location: {location}\n- type: {}\n- modifiers: {}",
             token.token_type(),
-            token
-                .token_modifers()
-                .iter()
-                .map(|m| m.to_string())
-                .join(", "),
+            modifiers,
         )];
 
         let text_document_position_params = TextDocumentPositionParams::try_from(&location)
