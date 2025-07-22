@@ -1,7 +1,7 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, process::Stdio, sync::Arc};
 
 use anyhow::{Context, Result, bail, ensure};
-use lsp_client::LspClient;
+use lsp_client::{LspClient, transport::io_transport};
 use lsp_types::{
     ClientCapabilities, ClientInfo, GeneralClientCapabilities, HoverClientCapabilities,
     InitializeParams, MarkupKind, PositionEncodingKind, SemanticTokensClientCapabilities,
@@ -10,13 +10,65 @@ use lsp_types::{
     TextDocumentClientCapabilities, TextDocumentSyncClientCapabilities, WindowClientCapabilities,
     WorkspaceClientCapabilities, WorkspaceFolder, WorkspaceSymbolClientCapabilities,
 };
+use tokio::{
+    process::{Child, Command},
+    task::JoinSet,
+};
 use tracing::info;
 
 use crate::{
     constants::{NAME, VERSION_STRING},
+    io_intercept::{BoxRead, BoxWrite, ReadFork, WriteFork},
     lang::ProgrammingLanguageQuirks,
-    mcp::TokenLegend,
 };
+
+use super::tokens::TokenLegend;
+
+pub(crate) async fn spawn_lsp(
+    quirks: &Arc<dyn ProgrammingLanguageQuirks>,
+    intercept_io: Option<&Path>,
+    workspace: &Path,
+    tasks: &mut JoinSet<Result<()>>,
+) -> Result<(Arc<LspClient>, Child)> {
+    let stderr = if let Some(intercept_io) = intercept_io {
+        Stdio::from(
+            tokio::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(intercept_io.join("lsp.stderr.txt"))
+                .await
+                .context("open stderr log file for language server")?
+                .into_std()
+                .await,
+        )
+    } else {
+        Stdio::inherit()
+    };
+
+    let mut child = Command::new(quirks.language_server())
+        .current_dir(workspace)
+        .kill_on_drop(true)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(stderr)
+        .spawn()
+        .context("cannot spawn language server")?;
+
+    let stdin = Box::pin(child.stdin.take().expect("just initialized")) as BoxWrite;
+    let stdout = Box::pin(child.stdout.take().expect("just initialized")) as BoxRead;
+    let (stdin, stdout) = if let Some(intercept_io) = intercept_io {
+        let stdin =
+            Box::pin(WriteFork::new(stdin, intercept_io, "lsp.stdin.txt", tasks).await?) as _;
+        let stdout =
+            Box::pin(ReadFork::new(stdout, intercept_io, "lsp.stdout.txt", tasks).await?) as _;
+        (stdin, stdout)
+    } else {
+        (stdin, stdout)
+    };
+    let (tx, rx) = io_transport(stdin, stdout);
+    let client = Arc::new(LspClient::new(tx, rx));
+    Ok((client, child))
+}
 
 pub(crate) async fn init_lsp(
     client: &LspClient,

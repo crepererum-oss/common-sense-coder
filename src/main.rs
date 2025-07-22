@@ -1,24 +1,22 @@
 use std::{
     path::{Path, PathBuf},
-    process::Stdio,
     sync::Arc,
 };
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use constants::{REVISION, VERSION, VERSION_STRING};
-use init::init_lsp;
 use io_intercept::{BoxRead, BoxWrite, ReadFork, WriteFork};
 use lang::{ProgrammingLanguage, ProgrammingLanguageQuirks};
 use logging::{LoggingCLIConfig, setup_logging};
-use lsp_client::{LspClient, transport::io_transport};
-use mcp::CodeExplorer;
-use progress_guard::ProgressGuard;
-use rmcp::{ServiceExt, transport::stdio};
-use tokio::{
-    process::Command,
-    task::{JoinError, JoinSet},
+use lsp::{
+    init::{init_lsp, spawn_lsp},
+    progress_guard::ProgressGuard,
 };
+use lsp_client::LspClient;
+use mcp::CodeExplorer;
+use rmcp::{ServiceExt, transport::stdio};
+use tokio::task::{JoinError, JoinSet};
 use tracing::{info, warn};
 
 // used in integration tests
@@ -32,12 +30,11 @@ use predicates as _;
 use tempfile as _;
 
 mod constants;
-mod init;
 mod io_intercept;
 mod lang;
 mod logging;
+mod lsp;
 mod mcp;
-mod progress_guard;
 
 /// Provides a "common sense" interface for a language model via Model Context Provider (MCP).
 ///
@@ -98,46 +95,15 @@ async fn main() -> Result<()> {
             .context("create directories for IO interception")?;
     }
 
-    let stderr = if let Some(intercept_io) = &args.intercept_io {
-        Stdio::from(
-            tokio::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(intercept_io.join("lsp.stderr.txt"))
-                .await
-                .context("open stderr log file for language server")?
-                .into_std()
-                .await,
-        )
-    } else {
-        Stdio::inherit()
-    };
-
     let quirks = args.programming_language.quirks();
-
-    let mut child = Command::new(quirks.language_server())
-        .current_dir(&args.workspace)
-        .kill_on_drop(true)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(stderr)
-        .spawn()
-        .context("cannot spawn language server")?;
-
-    let stdin = Box::pin(child.stdin.take().expect("just initialized")) as BoxWrite;
-    let stdout = Box::pin(child.stdout.take().expect("just initialized")) as BoxRead;
-    let (stdin, stdout) = if let Some(intercept_io) = &args.intercept_io {
-        let stdin =
-            Box::pin(WriteFork::new(stdin, intercept_io, "lsp.stdin.txt", &mut tasks).await?) as _;
-        let stdout =
-            Box::pin(ReadFork::new(stdout, intercept_io, "lsp.stdout.txt", &mut tasks).await?) as _;
-        (stdin, stdout)
-    } else {
-        (stdin, stdout)
-    };
-    let (tx, rx) = io_transport(stdin, stdout);
-    let client = Arc::new(LspClient::new(tx, rx));
-
+    let (client, mut child) = spawn_lsp(
+        &quirks,
+        args.intercept_io.as_deref(),
+        &args.workspace,
+        &mut tasks,
+    )
+    .await
+    .context("spawn LSP")?;
     let progress_guard = ProgressGuard::start(&mut tasks, &quirks, Arc::clone(&client));
 
     let (stdin, stdout) = stdio();

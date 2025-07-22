@@ -3,7 +3,6 @@ use std::{path::Path, sync::Arc};
 use anyhow::Context;
 use error::{OptionExt, ResultExt};
 use itertools::Itertools;
-use location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri};
 use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, HoverContents, HoverParams,
     LanguageString, MarkedString, ReferenceContext, ReferenceParams, SemanticTokensParams,
@@ -29,14 +28,14 @@ use search::SearchMode;
 use crate::{
     ProgressGuard,
     constants::{NAME, VERSION_STRING},
+    lsp::{
+        location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri},
+        tokens::TokenLegend,
+    },
 };
 
-pub(crate) use tokens::TokenLegend;
-
 mod error;
-mod location;
 mod search;
-mod tokens;
 
 #[derive(Debug)]
 pub(crate) struct CodeExplorer {
@@ -83,7 +82,9 @@ impl CodeExplorer {
                 let resp = client
                     .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
                         text_document: TextDocumentIdentifier {
-                            uri: path_to_uri(&self.workspace, &path)?,
+                            uri: path_to_uri(&self.workspace, &path)
+                                .context("convert path to URI")
+                                .internal()?,
                         },
                         work_done_progress_params: Default::default(),
                         partial_result_params: Default::default(),
@@ -163,7 +164,10 @@ impl CodeExplorer {
                     location,
                     Arc::clone(&self.workspace),
                     workspace_and_dependencies,
-                )? {
+                )
+                .context("create MCP location")
+                .internal()?
+                {
                     Some(loc) => loc,
                     None => {
                         return Ok(None);
@@ -204,7 +208,9 @@ impl CodeExplorer {
 
         let resp = client
             .send_request::<SemanticTokensFullRequest>(SemanticTokensParams {
-                text_document: path_to_text_document_identifier(&self.workspace, &path)?,
+                text_document: path_to_text_document_identifier(&self.workspace, &path)
+                    .context("convert path to text document identifier")
+                    .internal()?,
                 work_done_progress_params: Default::default(),
                 partial_result_params: Default::default(),
             })
@@ -244,7 +250,9 @@ impl CodeExplorer {
                 .join(", "),
         )];
 
-        let text_document_position_params = TextDocumentPositionParams::try_from(&location)?;
+        let text_document_position_params = TextDocumentPositionParams::try_from(&location)
+            .context("create text document position params")
+            .internal()?;
         let resp = client
             .send_request::<HoverRequest>(HoverParams {
                 text_document_position_params: text_document_position_params.clone(),
@@ -277,7 +285,9 @@ impl CodeExplorer {
             sections.push(format!(
                 "Declaration:\n{}",
                 LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
+                    .context("format location variants")
+                    .internal()?
             ))
         }
 
@@ -293,7 +303,9 @@ impl CodeExplorer {
             sections.push(format!(
                 "Definition:\n{}",
                 LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
+                    .context("format location variants")
+                    .internal()?
             ))
         }
 
@@ -309,7 +321,9 @@ impl CodeExplorer {
             sections.push(format!(
                 "Implementation:\n{}",
                 LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
+                    .context("format location variants")
+                    .internal()?
             ))
         }
 
@@ -325,7 +339,9 @@ impl CodeExplorer {
             sections.push(format!(
                 "Type Definition:\n{}",
                 LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)?
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
+                    .context("format location variants")
+                    .internal()?
             ))
         }
 
