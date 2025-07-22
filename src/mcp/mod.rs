@@ -16,15 +16,18 @@ use lsp_types::{
     },
 };
 use rmcp::{
-    ServerHandler,
-    handler::server::tool::{Parameters, ToolRouter},
+    RoleServer, ServerHandler,
+    handler::server::tool::{Parameters, ToolCallContext, ToolRouter},
     model::{
-        CallToolResult, Content, ErrorData as McpError, Implementation, ServerCapabilities,
-        ServerInfo,
+        CallToolRequestParam, CallToolResult, Content, ErrorData as McpError, Implementation,
+        ListToolsResult, PaginatedRequestParam, ServerCapabilities, ServerInfo,
     },
-    schemars, tool, tool_handler, tool_router,
+    schemars,
+    service::RequestContext,
+    tool, tool_router,
 };
 use search::SearchMode;
+use tracing::info;
 
 use crate::{
     ProgressGuard,
@@ -464,7 +467,6 @@ fn empty_string_to_none(s: Option<String>) -> Option<String> {
     s.and_then(|s| (!s.is_empty()).then_some(s))
 }
 
-#[tool_handler]
 impl ServerHandler for CodeExplorer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
@@ -476,5 +478,24 @@ impl ServerHandler for CodeExplorer {
             },
             instructions: Some("This tool helps you to understand which symbols (functions, classes, traits, interfaces, etc.) are defined in a code base and how they are used.".into()),
         }
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        info!(name = request.name.as_ref(), "call tool");
+        let tcc = ToolCallContext::new(self, request, context);
+        self.tool_router.call(tcc).await
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        let items = self.tool_router.list_all();
+        Ok(ListToolsResult::with_all_items(items))
     }
 }
