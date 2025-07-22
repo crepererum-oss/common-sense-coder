@@ -4,6 +4,8 @@ use serde_json::json;
 
 use crate::setup::{TestSetup, TextOrJson, map};
 
+const RESULT_SEP: &str = "==========";
+
 #[tokio::test]
 async fn test_info_for_all_in_file() {
     let setup = TestSetup::new().await;
@@ -15,7 +17,7 @@ async fn test_info_for_all_in_file() {
     let mut snapshot = String::new();
     for symbol in symbols {
         writeln!(&mut snapshot).unwrap();
-        writeln!(&mut snapshot, "==========").unwrap();
+        writeln!(&mut snapshot, "{RESULT_SEP}").unwrap();
         writeln!(&mut snapshot).unwrap();
 
         let (name, line, character) = match symbol {
@@ -358,5 +360,55 @@ async fn test_info_for_all_in_file() {
 
     References:
     - src/lib.rs:9:41
+    ");
+}
+
+#[tokio::test]
+async fn test_multi_match() {
+    let setup = TestSetup::new().await;
+
+    let path = "src/lib.rs";
+
+    let results = setup
+        .symbol_info_ok(map([("path", json!(path)), ("name", json!("accu"))]))
+        .await;
+    let results = results.join(&format!("\n{RESULT_SEP}\n"));
+    insta::assert_snapshot!(results, @r"
+    Token:
+
+    - location: src/lib.rs:7:9
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:7:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:7:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:8:16
     ");
 }
