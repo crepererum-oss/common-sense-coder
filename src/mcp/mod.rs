@@ -85,9 +85,9 @@ impl CodeExplorer {
                         .ok();
                     progress += 1;
                 }
-
-                futures::future::pending::<()>().await
             }
+
+            futures::future::pending::<()>().await
         };
 
         let fut_wait = async { self.progress_guard.wait().await };
