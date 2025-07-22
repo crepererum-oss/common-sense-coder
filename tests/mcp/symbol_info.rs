@@ -167,15 +167,156 @@ async fn test_info_for_all_in_file() {
 
     Inputs:
       path: src/lib.rs
+      name: accu
+      line: 7
+      char: 5
+
+    ---
+
+    Token:
+
+    - location: src/lib.rs:7:9
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:7:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:7:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:8:16
+
+    ==========
+
+    Inputs:
+      path: src/lib.rs
+      name: accu
+      line: 8
+      char: 5
+
+    ---
+
+    Token:
+
+    - location: src/lib.rs:8:9
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:8:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:8:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:9:16
+
+    ==========
+
+    Inputs:
+      path: src/lib.rs
+      name: accu
+      line: 9
+      char: 5
+
+    ---
+
+    Token:
+
+    - location: src/lib.rs:9:9
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declaration:
+    - src/lib.rs:9:9
+
+    ---
+
+    Definition:
+    - src/lib.rs:9:9
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:10:5
+
+    ==========
+
+    Inputs:
+      path: src/lib.rs
       name: private_fn
-      line: 10
+      line: 13
       char: 1
 
     ---
 
     Token:
 
-    - location: src/lib.rs:11:4
+    - location: src/lib.rs:14:4
     - type: function
     - modifiers: declaration
 
@@ -196,12 +337,12 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declaration:
-    - src/lib.rs:11:4
+    - src/lib.rs:14:4
 
     ---
 
     Definition:
-    - src/lib.rs:11:4
+    - src/lib.rs:14:4
 
     ---
 
@@ -216,6 +357,6 @@ async fn test_info_for_all_in_file() {
     ---
 
     References:
-    - src/lib.rs:7:64
+    - src/lib.rs:9:41
     ");
 }
