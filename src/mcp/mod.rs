@@ -474,7 +474,7 @@ impl ServerHandler for CodeExplorer {
                 name: NAME.to_owned(),
                 version: VERSION_STRING.to_owned(),
             },
-            instructions: Some("A code exporer".into()),
+            instructions: Some("This tool helps you to understand which symbols (functions, classes, traits, interfaces, etc.) are defined in a code base and how they are used.".into()),
         }
     }
 }
