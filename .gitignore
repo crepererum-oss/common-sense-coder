@@ -3,6 +3,7 @@
 
 # test artifacts
 /intercept
+*.pending-snap
 
 # AI & IDE files
 /.claude

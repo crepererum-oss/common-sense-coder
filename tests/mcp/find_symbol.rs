@@ -209,11 +209,38 @@ async fn test_path() {
       },
       {
         "type": "json",
+        "name": "accu",
+        "kind": "Variable",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 7,
+        "character": 5
+      },
+      {
+        "type": "json",
+        "name": "accu",
+        "kind": "Variable",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 8,
+        "character": 5
+      },
+      {
+        "type": "json",
+        "name": "accu",
+        "kind": "Variable",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 9,
+        "character": 5
+      },
+      {
+        "type": "json",
         "name": "private_fn",
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 10,
+        "line": 13,
         "character": 1
       }
     ]
