@@ -24,7 +24,7 @@ async fn test_workspace_query() {
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 6,
+        "line": 13,
         "character": 8
       }
     ]
@@ -66,7 +66,7 @@ async fn test_global_query() {
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 6,
+        "line": 13,
         "character": 8
       }
     ]
@@ -100,7 +100,7 @@ async fn test_workspace_fuzzy_query() {
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 6,
+        "line": 13,
         "character": 8
       },
       {
@@ -153,7 +153,7 @@ async fn test_global_fuzzy_query() {
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 6,
+        "line": 13,
         "character": 8
       },
       {
@@ -213,7 +213,7 @@ async fn test_path() {
         "kind": "Variable",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 7,
+        "line": 14,
         "character": 5
       },
       {
@@ -222,7 +222,7 @@ async fn test_path() {
         "kind": "Variable",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 8,
+        "line": 15,
         "character": 5
       },
       {
@@ -231,7 +231,7 @@ async fn test_path() {
         "kind": "Variable",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 9,
+        "line": 16,
         "character": 5
       },
       {
@@ -240,7 +240,7 @@ async fn test_path() {
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 13,
+        "line": 20,
         "character": 1
       }
     ]

@@ -126,7 +126,7 @@ async fn test_info_for_all_in_file() {
 
     Token:
 
-    - location: src/lib.rs:6:8
+    - location: src/lib.rs:13:8
     - type: function
     - modifiers: declaration, public
 
@@ -142,13 +142,23 @@ async fn test_info_for_all_in_file() {
 
     ---
 
+    Calculate a few things.
+
+    ```rust
+    use main_lib::my_lib_fn;
+
+    my_lib_fn(1, 2);
+    ```
+
+    ---
+
     Declaration:
-    - src/lib.rs:6:8
+    - src/lib.rs:13:8
 
     ---
 
     Definition:
-    - src/lib.rs:6:8
+    - src/lib.rs:13:8
 
     ---
 
@@ -170,14 +180,14 @@ async fn test_info_for_all_in_file() {
     Inputs:
       path: src/lib.rs
       name: accu
-      line: 7
+      line: 14
       char: 5
 
     ---
 
     Token:
 
-    - location: src/lib.rs:7:9
+    - location: src/lib.rs:14:9
     - type: variable
     - modifiers: declaration
 
@@ -190,12 +200,12 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declaration:
-    - src/lib.rs:7:9
+    - src/lib.rs:14:9
 
     ---
 
     Definition:
-    - src/lib.rs:7:9
+    - src/lib.rs:14:9
 
     ---
 
@@ -210,21 +220,21 @@ async fn test_info_for_all_in_file() {
     ---
 
     References:
-    - src/lib.rs:8:16
+    - src/lib.rs:15:16
 
     ==========
 
     Inputs:
       path: src/lib.rs
       name: accu
-      line: 8
+      line: 15
       char: 5
 
     ---
 
     Token:
 
-    - location: src/lib.rs:8:9
+    - location: src/lib.rs:15:9
     - type: variable
     - modifiers: declaration
 
@@ -237,12 +247,12 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declaration:
-    - src/lib.rs:8:9
+    - src/lib.rs:15:9
 
     ---
 
     Definition:
-    - src/lib.rs:8:9
+    - src/lib.rs:15:9
 
     ---
 
@@ -257,21 +267,21 @@ async fn test_info_for_all_in_file() {
     ---
 
     References:
-    - src/lib.rs:9:16
+    - src/lib.rs:16:16
 
     ==========
 
     Inputs:
       path: src/lib.rs
       name: accu
-      line: 9
+      line: 16
       char: 5
 
     ---
 
     Token:
 
-    - location: src/lib.rs:9:9
+    - location: src/lib.rs:16:9
     - type: variable
     - modifiers: declaration
 
@@ -284,12 +294,12 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declaration:
-    - src/lib.rs:9:9
+    - src/lib.rs:16:9
 
     ---
 
     Definition:
-    - src/lib.rs:9:9
+    - src/lib.rs:16:9
 
     ---
 
@@ -304,21 +314,21 @@ async fn test_info_for_all_in_file() {
     ---
 
     References:
-    - src/lib.rs:10:5
+    - src/lib.rs:17:5
 
     ==========
 
     Inputs:
       path: src/lib.rs
       name: private_fn
-      line: 13
+      line: 20
       char: 1
 
     ---
 
     Token:
 
-    - location: src/lib.rs:14:4
+    - location: src/lib.rs:21:4
     - type: function
     - modifiers: declaration
 
@@ -339,12 +349,12 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declaration:
-    - src/lib.rs:14:4
+    - src/lib.rs:21:4
 
     ---
 
     Definition:
-    - src/lib.rs:14:4
+    - src/lib.rs:21:4
 
     ---
 
@@ -359,7 +369,7 @@ async fn test_info_for_all_in_file() {
     ---
 
     References:
-    - src/lib.rs:9:41
+    - src/lib.rs:16:41
     ");
 }
 
@@ -376,7 +386,7 @@ async fn test_multi_match() {
     insta::assert_snapshot!(results, @r"
     Token:
 
-    - location: src/lib.rs:7:9
+    - location: src/lib.rs:14:9
     - type: variable
     - modifiers: declaration
 
@@ -389,12 +399,12 @@ async fn test_multi_match() {
     ---
 
     Declaration:
-    - src/lib.rs:7:9
+    - src/lib.rs:14:9
 
     ---
 
     Definition:
-    - src/lib.rs:7:9
+    - src/lib.rs:14:9
 
     ---
 
@@ -409,13 +419,13 @@ async fn test_multi_match() {
     ---
 
     References:
-    - src/lib.rs:8:16
+    - src/lib.rs:15:16
 
     ==========
 
     Token:
 
-    - location: src/lib.rs:8:9
+    - location: src/lib.rs:15:9
     - type: variable
     - modifiers: declaration
 
@@ -428,12 +438,12 @@ async fn test_multi_match() {
     ---
 
     Declaration:
-    - src/lib.rs:8:9
+    - src/lib.rs:15:9
 
     ---
 
     Definition:
-    - src/lib.rs:8:9
+    - src/lib.rs:15:9
 
     ---
 
@@ -448,52 +458,13 @@ async fn test_multi_match() {
     ---
 
     References:
-    - src/lib.rs:9:16
+    - src/lib.rs:16:16
 
     ==========
 
     Token:
 
-    - location: src/lib.rs:8:16
-    - type: variable
-    - modifiers: none
-
-    ---
-
-    ```rust
-    let accu: u64
-    ```
-
-    ---
-
-    Declaration:
-    - src/lib.rs:7:9
-
-    ---
-
-    Definition:
-    - src/lib.rs:7:9
-
-    ---
-
-    Implementation:
-    None
-
-    ---
-
-    Type Definition:
-    None
-
-    ---
-
-    References:
-    - src/lib.rs:8:16
-
-    ==========
-
-    Token:
-
-    - location: src/lib.rs:9:9
+    - location: src/lib.rs:16:9
     - type: variable
     - modifiers: declaration
 
@@ -506,12 +477,12 @@ async fn test_multi_match() {
     ---
 
     Declaration:
-    - src/lib.rs:9:9
+    - src/lib.rs:16:9
 
     ---
 
     Definition:
-    - src/lib.rs:9:9
+    - src/lib.rs:16:9
 
     ---
 
@@ -526,85 +497,7 @@ async fn test_multi_match() {
     ---
 
     References:
-    - src/lib.rs:10:5
-
-    ==========
-
-    Token:
-
-    - location: src/lib.rs:9:16
-    - type: variable
-    - modifiers: none
-
-    ---
-
-    ```rust
-    let accu: u64
-    ```
-
-    ---
-
-    Declaration:
-    - src/lib.rs:8:9
-
-    ---
-
-    Definition:
-    - src/lib.rs:8:9
-
-    ---
-
-    Implementation:
-    None
-
-    ---
-
-    Type Definition:
-    None
-
-    ---
-
-    References:
-    - src/lib.rs:9:16
-
-    ==========
-
-    Token:
-
-    - location: src/lib.rs:10:5
-    - type: variable
-    - modifiers: none
-
-    ---
-
-    ```rust
-    let accu: u64
-    ```
-
-    ---
-
-    Declaration:
-    - src/lib.rs:9:9
-
-    ---
-
-    Definition:
-    - src/lib.rs:9:9
-
-    ---
-
-    Implementation:
-    None
-
-    ---
-
-    Type Definition:
-    None
-
-    ---
-
-    References:
-    - src/lib.rs:10:5
+    - src/lib.rs:17:5
     ");
 }
 
@@ -642,5 +535,46 @@ async fn test_foreign_symbol() {
         .symbol_info_ok(map([("path", json!(path)), ("name", json!(name))]))
         .await;
     let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
-    insta::assert_snapshot!(results, @r"");
+    insta::assert_snapshot!(results, @r"
+    Token:
+
+    - location: /fixtures/dependency_lib/src/lib.rs:1:8
+    - type: function
+    - modifiers: declaration, public
+
+    ---
+
+    ```rust
+    dependency_lib
+    ```
+
+    ```rust
+    pub fn my_lib_fn(left: u64, right: u64) -> u64
+    ```
+
+    ---
+
+    Declaration:
+    None
+
+    ---
+
+    Definition:
+    None
+
+    ---
+
+    Implementation:
+    None
+
+    ---
+
+    Type Definition:
+    None
+
+    ---
+
+    References:
+    - src/lib.rs:2:21
+    ");
 }

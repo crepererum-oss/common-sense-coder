@@ -184,7 +184,7 @@ pub(crate) async fn init_lsp(
             );
 
             // set up legend
-            TokenLegend::new(semantic_tokens_options.legend)
+            TokenLegend::new(semantic_tokens_options.legend, quirks)
         }
         SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(_) => {
             bail!("dynamic token registration not supported");

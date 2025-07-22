@@ -242,10 +242,13 @@ impl CodeExplorer {
         let tokens = doc.query(&name, line, character);
         let mut results = vec![];
         for token in tokens {
-            results.push(Content::text(
-                self.symbol_info_for_token(token, &path, &client, workspace_and_dependencies)
-                    .await?,
-            ));
+            let Some(res) = self
+                .symbol_info_for_token(token, &path, &client, workspace_and_dependencies)
+                .await?
+            else {
+                continue;
+            };
+            results.push(Content::text(res));
         }
 
         Ok(CallToolResult::success(results))
@@ -257,11 +260,11 @@ impl CodeExplorer {
         path: &str,
         client: &LspClient,
         workspace_and_dependencies: bool,
-    ) -> Result<String, McpError> {
+    ) -> Result<Option<String>, McpError> {
         let location = token.location(path.to_owned(), Arc::clone(&self.workspace));
 
         let modifiers = token
-            .token_modifers()
+            .token_modifiers()
             .iter()
             .map(|m| m.to_string())
             .join(", ");
@@ -280,14 +283,17 @@ impl CodeExplorer {
         let text_document_position_params = TextDocumentPositionParams::try_from(&location)
             .context("create text document position params")
             .internal()?;
-        let resp = client
+        let Some(resp) = client
             .send_request::<HoverRequest>(HoverParams {
                 text_document_position_params: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
             })
             .await
+            .context("HoverRequest")
             .internal()?
-            .not_found(location.to_string())?;
+        else {
+            return Ok(None);
+        };
 
         sections.extend(match resp.contents {
             HoverContents::Scalar(markup_string) => {
@@ -405,7 +411,7 @@ impl CodeExplorer {
             sections.push(format!("References:\n{locations}"));
         }
 
-        Ok(sections.join("\n\n---\n\n"))
+        Ok(Some(sections.join("\n\n---\n\n")))
     }
 }
 

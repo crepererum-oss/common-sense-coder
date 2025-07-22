@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use lsp_types::{SemanticToken, SemanticTokensLegend};
 
+use crate::ProgrammingLanguageQuirks;
+
 use super::location::McpLocation;
 
 #[derive(Debug)]
@@ -13,7 +15,12 @@ pub(crate) struct TokenLegend {
 }
 
 impl TokenLegend {
-    pub(crate) fn new(legend: SemanticTokensLegend) -> Self {
+    pub(crate) fn new(
+        legend: SemanticTokensLegend,
+        quirks: &Arc<dyn ProgrammingLanguageQuirks>,
+    ) -> Self {
+        let token_modifier_scores = quirks.semantic_token_modifier_scores();
+
         Self {
             token_types: legend
                 .token_types
@@ -23,7 +30,14 @@ impl TokenLegend {
             token_modifiers: legend
                 .token_modifiers
                 .into_iter()
-                .map(|t| TokenModifier(t.as_str().to_owned()))
+                .map(|t| {
+                    let name = t.as_str().to_owned();
+                    let score = token_modifier_scores
+                        .get(&name)
+                        .copied()
+                        .unwrap_or_default();
+                    TokenModifier { name, score }
+                })
                 .collect(),
         }
     }
@@ -100,6 +114,7 @@ impl<'legend> Document<'legend> {
             .filter(|token| token.data == name)
             .min_set_by_key(|token| {
                 (
+                    -token.token_modifiers().score(),
                     line.map(|line| line.abs_diff(token.line)),
                     character.map(|character| character.abs_diff(token.character)),
                 )
@@ -139,7 +154,7 @@ impl Token<'_> {
         self.token_type
     }
 
-    pub(crate) fn token_modifers(&self) -> TokenModifers<'_> {
+    pub(crate) fn token_modifiers(&self) -> TokenModifers<'_> {
         self.token_modifiers
     }
 }
@@ -153,16 +168,19 @@ impl std::fmt::Display for TokenType {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct TokenModifier(String);
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct TokenModifier {
+    name: String,
+    score: i64,
+}
 
 impl std::fmt::Display for TokenModifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.name)
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct TokenModifers<'a> {
     legend: &'a [TokenModifier],
     bitset: u32,
@@ -175,6 +193,16 @@ impl TokenModifers<'_> {
             .zip(BitIter::new(self.bitset))
             .filter(|(_modifier, bit)| *bit)
             .map(|(modifier, _bit)| modifier)
+    }
+
+    fn score(&self) -> i64 {
+        self.iter().map(|modifier| modifier.score).sum()
+    }
+}
+
+impl std::fmt::Debug for TokenModifers<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_set().entries(self.iter()).finish()
     }
 }
 
