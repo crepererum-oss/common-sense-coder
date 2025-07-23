@@ -607,3 +607,40 @@ async fn test_multi_match() {
     - src/lib.rs:10:5
     ");
 }
+
+#[tokio::test]
+async fn test_foreign_symbol() {
+    let setup = TestSetup::new().await.with_normalize_paths(false);
+
+    let name = "my_lib_fn";
+
+    let paths = setup
+        .find_symbol_ok(map([
+            ("query", json!(name)),
+            ("workspace_and_dependencies", json!(true)),
+        ]))
+        .await
+        .into_iter()
+        .map(|res| match res {
+            TextOrJson::Text(_) => panic!("should be JSON"),
+            TextOrJson::Json(map) => map
+                .get("file")
+                .expect("file")
+                .as_str()
+                .expect("should be string")
+                .to_owned(),
+        })
+        .filter(|path| path.starts_with("/"))
+        .collect::<Vec<_>>();
+    assert_eq!(paths.len(), 1);
+    let path = &paths[0];
+    println!("path: {path}");
+
+    let setup = setup.with_normalize_paths(true);
+
+    let results = setup
+        .symbol_info_ok(map([("path", json!(path)), ("name", json!(name))]))
+        .await;
+    let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
+    insta::assert_snapshot!(results, @r"");
+}

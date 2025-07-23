@@ -61,6 +61,8 @@ pub(crate) struct TestSetup {
     cwd: TempDir,
 
     service: RunningService<RoleClient, ()>,
+
+    normalize_paths: bool,
 }
 
 impl TestSetup {
@@ -119,7 +121,13 @@ impl TestSetup {
             intercept_io_dir,
             cwd,
             service,
+            normalize_paths: true,
         }
+    }
+
+    pub(crate) fn with_normalize_paths(mut self, normalize_paths: bool) -> Self {
+        self.normalize_paths = normalize_paths;
+        self
     }
 
     async fn call_tool_ok(&self, params: CallToolRequestParam) -> Vec<TextOrJson> {
@@ -130,11 +138,16 @@ impl TestSetup {
         resp.content
             .into_iter()
             .map(|annotated| match annotated.raw {
-                RawContent::Text(raw_text_content) => TextOrJson::from(
-                    raw_text_content
-                        .text
-                        .replace(&self.fixtures_path, "/fixtures"),
-                ),
+                RawContent::Text(raw_text_content) => {
+                    let s = raw_text_content.text;
+                    let s = if self.normalize_paths {
+                        s.replace(&self.fixtures_path, "/fixtures")
+                    } else {
+                        s
+                    };
+
+                    TextOrJson::from(s)
+                }
                 RawContent::Image(_) => unimplemented!("image content not supported"),
                 RawContent::Resource(_) => unimplemented!("resource content not supported"),
                 RawContent::Audio(_) => unimplemented!("audio content not supported"),
