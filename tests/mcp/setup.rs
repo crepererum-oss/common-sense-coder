@@ -99,8 +99,7 @@ impl TestSetup {
         let cwd = TempDir::new().expect("create CWD temp dir");
 
         let mut cmd = Command::new(server_path);
-        cmd.env("RA_LOG", "info")
-            .current_dir(cwd.path())
+        cmd.current_dir(cwd.path())
             .env("RUST_BACKTRACE", "1")
             .arg("--intercept-io")
             .arg(intercept_io_dir.display().to_string())
