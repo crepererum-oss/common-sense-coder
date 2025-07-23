@@ -24,7 +24,10 @@ impl ProgrammingLanguage {
 /// Quirks for the respective [`ProgrammingLanguage`].
 pub(crate) trait ProgrammingLanguageQuirks: Debug + Send + Sync + 'static {
     /// Binary name of the language server.
-    fn language_server(&self) -> String;
+    fn language_server_binary(&self) -> String;
+
+    /// Language server environment variables.
+    fn language_server_env(&self) -> HashMap<String, String>;
 
     /// Language server initialization options.
     fn initialization_options(&self) -> Option<serde_json::Value>;
@@ -42,8 +45,12 @@ pub(crate) trait ProgrammingLanguageQuirks: Debug + Send + Sync + 'static {
 struct Rust;
 
 impl ProgrammingLanguageQuirks for Rust {
-    fn language_server(&self) -> String {
+    fn language_server_binary(&self) -> String {
         "rust-analyzer".to_owned()
+    }
+
+    fn language_server_env(&self) -> HashMap<String, String> {
+        HashMap::from([("RA_LOG".to_owned(), "info".to_owned())])
     }
 
     fn initialization_options(&self) -> Option<serde_json::Value> {

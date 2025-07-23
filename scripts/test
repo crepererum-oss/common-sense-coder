@@ -6,5 +6,4 @@ export cargo_dir="$(realpath "$(dirname "$0")")/.."
 cd "$cargo_dir"
 
 export RUST_BACKTRACE=1
-export RA_LOG=info
 exec cargo run -- --intercept-io="intercept/test" --workspace="tests/fixtures/main_lib" -vv

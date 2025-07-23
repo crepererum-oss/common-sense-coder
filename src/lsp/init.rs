@@ -45,9 +45,10 @@ pub(crate) async fn spawn_lsp(
         Stdio::inherit()
     };
 
-    let mut child = Command::new(quirks.language_server())
+    let mut child = Command::new(quirks.language_server_binary())
         .current_dir(workspace)
         .kill_on_drop(true)
+        .envs(quirks.language_server_env())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(stderr)
