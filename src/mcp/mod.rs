@@ -376,6 +376,7 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("GotoDeclaration")
             .internal()?
         {
             sections.push(format!(
@@ -394,6 +395,7 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("GotoDefinition")
             .internal()?
         {
             sections.push(format!(
@@ -412,6 +414,7 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("GotoImplementation")
             .internal()?
         {
             sections.push(format!(
@@ -430,6 +433,7 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("GotoTypeDefinition")
             .internal()?
         {
             sections.push(format!(
@@ -451,6 +455,7 @@ impl CodeExplorer {
                 },
             })
             .await
+            .context("References")
             .internal()?
         {
             let locations = locations
