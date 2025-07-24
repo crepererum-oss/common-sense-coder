@@ -227,7 +227,7 @@ async fn test_path() {
 
     insta::assert_json_snapshot!(
         setup.find_symbol_ok(map([
-            ("path", json!("src/lib.rs")),
+            ("file", json!("src/lib.rs")),
         ])).await,
         @r#"
     [
@@ -291,7 +291,7 @@ async fn test_path() {
 
     insta::assert_json_snapshot!(
         setup.find_symbol_ok(map([
-            ("path", json!("src/sub.rs")),
+            ("file", json!("src/sub.rs")),
         ])).await,
         @r#"
     [
@@ -315,7 +315,7 @@ async fn test_path_query() {
 
     insta::assert_json_snapshot!(
         setup.find_symbol_ok(map([
-            ("path", json!("src/lib.rs")),
+            ("file", json!("src/lib.rs")),
             ("query", json!("does_not_exist")),
         ])).await,
         @"[]"
@@ -323,7 +323,7 @@ async fn test_path_query() {
 
     insta::assert_json_snapshot!(
         setup.find_symbol_ok(map([
-            ("path", json!("src/lib.rs")),
+            ("file", json!("src/lib.rs")),
             ("query", json!("my_lib_fn")),
         ])).await,
         @r#"
@@ -344,7 +344,7 @@ async fn test_path_query() {
     // query is NOT fuzzy
     insta::assert_json_snapshot!(
         setup.find_symbol_ok(map([
-            ("path", json!("src/lib.rs")),
+            ("file", json!("src/lib.rs")),
             ("query", json!("mylibfn")),
         ])).await,
         @"[]",
@@ -357,7 +357,7 @@ async fn test_path_fuzzy_query() {
 
     insta::assert_json_snapshot!(
         setup.find_symbol_ok(map([
-            ("path", json!("src/lib.rs")),
+            ("file", json!("src/lib.rs")),
             ("query", json!("mylibfn")),
             ("fuzzy", json!(true)),
         ])).await,

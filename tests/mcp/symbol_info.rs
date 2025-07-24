@@ -10,9 +10,9 @@ const RESULT_SEP: &str = "==========";
 async fn test_info_for_all_in_file() {
     let setup = TestSetup::new().await;
 
-    let path = "src/lib.rs";
+    let file = "src/lib.rs";
 
-    let symbols = setup.find_symbol_ok(map([("path", json!(path))])).await;
+    let symbols = setup.find_symbol_ok(map([("file", json!(file))])).await;
 
     let mut snapshot = String::new();
     for symbol in symbols {
@@ -40,7 +40,7 @@ async fn test_info_for_all_in_file() {
         };
 
         writeln!(&mut snapshot, "Inputs:").unwrap();
-        writeln!(&mut snapshot, "  path: {path}").unwrap();
+        writeln!(&mut snapshot, "  file: {file}").unwrap();
         writeln!(&mut snapshot, "  name: {name}").unwrap();
         writeln!(&mut snapshot, "  line: {line}").unwrap();
         writeln!(&mut snapshot, "  char: {character}").unwrap();
@@ -50,7 +50,7 @@ async fn test_info_for_all_in_file() {
 
         let resp = setup
             .symbol_info_ok(map([
-                ("path", json!(path)),
+                ("file", json!(file)),
                 ("name", json!(name)),
                 ("line", json!(line)),
                 ("character", json!(character)),
@@ -66,7 +66,7 @@ async fn test_info_for_all_in_file() {
     ==========
 
     Inputs:
-      path: src/lib.rs
+      file: src/lib.rs
       name: sub
       line: 4
       char: 1
@@ -117,7 +117,7 @@ async fn test_info_for_all_in_file() {
     ==========
 
     Inputs:
-      path: src/lib.rs
+      file: src/lib.rs
       name: my_lib_fn
       line: 6
       char: 1
@@ -178,7 +178,7 @@ async fn test_info_for_all_in_file() {
     ==========
 
     Inputs:
-      path: src/lib.rs
+      file: src/lib.rs
       name: accu
       line: 14
       char: 5
@@ -225,7 +225,7 @@ async fn test_info_for_all_in_file() {
     ==========
 
     Inputs:
-      path: src/lib.rs
+      file: src/lib.rs
       name: accu
       line: 15
       char: 5
@@ -272,7 +272,7 @@ async fn test_info_for_all_in_file() {
     ==========
 
     Inputs:
-      path: src/lib.rs
+      file: src/lib.rs
       name: accu
       line: 16
       char: 5
@@ -319,7 +319,7 @@ async fn test_info_for_all_in_file() {
     ==========
 
     Inputs:
-      path: src/lib.rs
+      file: src/lib.rs
       name: private_fn
       line: 20
       char: 1
@@ -377,10 +377,10 @@ async fn test_info_for_all_in_file() {
 async fn test_multi_match() {
     let setup = TestSetup::new().await;
 
-    let path = "src/lib.rs";
+    let file = "src/lib.rs";
 
     let results = setup
-        .symbol_info_ok(map([("path", json!(path)), ("name", json!("accu"))]))
+        .symbol_info_ok(map([("file", json!(file)), ("name", json!("accu"))]))
         .await;
     let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
     insta::assert_snapshot!(results, @r"
@@ -507,7 +507,7 @@ async fn test_foreign_symbol() {
 
     let name = "my_lib_fn";
 
-    let paths = setup
+    let files = setup
         .find_symbol_ok(map([
             ("query", json!(name)),
             ("workspace_and_dependencies", json!(true)),
@@ -523,16 +523,16 @@ async fn test_foreign_symbol() {
                 .expect("should be string")
                 .to_owned(),
         })
-        .filter(|path| path.starts_with("/"))
+        .filter(|file| file.starts_with("/"))
         .collect::<Vec<_>>();
-    assert_eq!(paths.len(), 1);
-    let path = &paths[0];
-    println!("path: {path}");
+    assert_eq!(files.len(), 1);
+    let file = &files[0];
+    println!("file: {file}");
 
     let setup = setup.with_normalize_paths(true);
 
     let results = setup
-        .symbol_info_ok(map([("path", json!(path)), ("name", json!(name))]))
+        .symbol_info_ok(map([("file", json!(file)), ("name", json!(name))]))
         .await;
     let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
     insta::assert_snapshot!(results, @r"

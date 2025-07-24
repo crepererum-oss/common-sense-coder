@@ -98,12 +98,14 @@ impl CodeExplorer {
         }
     }
 
-    #[tool(description = "find symbol (e.g. a struct, enum, method, ...) in code base")]
+    #[tool(
+        description = "Find symbol (e.g. a struct, enum, method, ...) in code base. Use the `symbol_info` tool afterwards to learn more about the found symbols."
+    )]
     async fn find_symbol(
         &self,
         Parameters(FindSymbolRequest {
             query,
-            path,
+            file,
             fuzzy,
             workspace_and_dependencies: workspace_and_dependencies_orig,
         }): Parameters<FindSymbolRequest>,
@@ -112,16 +114,16 @@ impl CodeExplorer {
         let client = self.wait_for_client(ctx).await;
 
         let query = empty_string_to_none(query);
-        let path = empty_string_to_none(path);
+        let file = empty_string_to_none(file);
         let fuzzy = fuzzy.unwrap_or_default();
         let workspace_and_dependencies = workspace_and_dependencies_orig.unwrap_or_default();
 
-        let symbol_informations = match path {
-            Some(path) => {
+        let symbol_informations = match file {
+            Some(file) => {
                 let resp = client
                     .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
                         text_document: TextDocumentIdentifier {
-                            uri: path_to_uri(&self.workspace, &path)
+                            uri: path_to_uri(&self.workspace, &file)
                                 .context("convert path to URI")
                                 .internal()?,
                         },
@@ -131,7 +133,7 @@ impl CodeExplorer {
                     .await
                     .context("DocumentSymbolRequest")
                     .internal()?
-                    .not_found(path)?;
+                    .not_found(file)?;
 
                 match resp {
                     DocumentSymbolResponse::Flat(symbol_informations) => symbol_informations,
@@ -257,11 +259,13 @@ impl CodeExplorer {
             .collect::<Result<Vec<_>, _>>()
     }
 
-    #[tool(description = "get information to given symbol")]
+    #[tool(
+        description = "Get detailed information about a given symbol (struct, enum, method, trait, ...) like documentation, declaration, references, usage across the code base, etc."
+    )]
     async fn symbol_info(
         &self,
         Parameters(SymbolInfoRequest {
-            path,
+            file,
             name,
             line,
             character,
@@ -275,7 +279,7 @@ impl CodeExplorer {
 
         let resp = client
             .send_request::<SemanticTokensFullRequest>(SemanticTokensParams {
-                text_document: path_to_text_document_identifier(&self.workspace, &path)
+                text_document: path_to_text_document_identifier(&self.workspace, &file)
                     .context("convert path to text document identifier")
                     .internal()?,
                 work_done_progress_params: Default::default(),
@@ -284,15 +288,15 @@ impl CodeExplorer {
             .await
             .context("SemanticTokensFullRequest")
             .internal()?
-            .not_found(path.clone())?;
-        let file = tokio::fs::read_to_string(self.workspace.join(&path))
+            .not_found(file.clone())?;
+        let file_content = tokio::fs::read_to_string(self.workspace.join(&file))
             .await
             .context("read file")
             .internal()?;
         let doc = match resp {
             lsp_types::SemanticTokensResult::Tokens(semantic_tokens) => self
                 .token_legend
-                .decode(&file, semantic_tokens.data)
+                .decode(&file_content, semantic_tokens.data)
                 .context("decode semantic tokens")
                 .internal()?,
             lsp_types::SemanticTokensResult::Partial(_) => {
@@ -306,7 +310,7 @@ impl CodeExplorer {
         let mut results = vec![];
         for token in tokens {
             let Some(res) = self
-                .symbol_info_for_token(token, &path, &client, workspace_and_dependencies)
+                .symbol_info_for_token(token, &file, &client, workspace_and_dependencies)
                 .await?
             else {
                 continue;
@@ -493,9 +497,9 @@ struct FindSymbolRequest {
 
     #[schemars(
         description = "path to the file, otherwise search the entire workspace",
-        default
+        length(min = 1)
     )]
-    path: Option<String>,
+    file: Option<String>,
 
     #[schemars(description = "search fuzzy")]
     fuzzy: Option<bool>,
@@ -516,8 +520,8 @@ struct SymbolResult {
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 struct SymbolInfoRequest {
-    #[schemars(description = "path to the file")]
-    path: String,
+    #[schemars(description = "path to the file, can be absolute or relative")]
+    file: String,
 
     #[schemars(description = "symbol name")]
     name: String,
@@ -531,7 +535,7 @@ struct SymbolInfoRequest {
     )]
     character: Option<u32>,
 
-    #[schemars(description = "search workspace and dependencies", default)]
+    #[schemars(description = "search workspace and dependencies")]
     workspace_and_dependencies: Option<bool>,
 }
 
@@ -557,7 +561,15 @@ impl ServerHandler for CodeExplorer {
                 name: NAME.to_owned(),
                 version: VERSION_STRING.to_owned(),
             },
-            instructions: Some("This tool helps you to understand which symbols (functions, classes, traits, interfaces, etc.) are defined in a code base and how they are used.".into()),
+            instructions: Some("\
+                This server helps you to understand a code base.\
+                \
+                It comes with two tools:\
+                - `find_symbols`: Searches symbols (structs, enums, methods, traits, ...) defined/used by the code base.\
+                - `symbol_info`: Provides detailed information about a symbol like documentation and usage pattern.\
+                \
+                First use the `find_symbols` tool to get the file path of the respective symbol. Then use the `symbol_info` tool to get the detailed information about them.\
+            ".trim().to_owned()),
         }
     }
 
