@@ -222,7 +222,7 @@ async fn test_global_fuzzy_query() {
 }
 
 #[tokio::test]
-async fn test_path() {
+async fn test_file() {
     let setup = TestSetup::new().await;
 
     insta::assert_json_snapshot!(
@@ -310,7 +310,7 @@ async fn test_path() {
 }
 
 #[tokio::test]
-async fn test_path_query() {
+async fn test_file_query() {
     let setup = TestSetup::new().await;
 
     insta::assert_json_snapshot!(
@@ -352,7 +352,7 @@ async fn test_path_query() {
 }
 
 #[tokio::test]
-async fn test_path_fuzzy_query() {
+async fn test_file_fuzzy_query() {
     let setup = TestSetup::new().await;
 
     insta::assert_json_snapshot!(
