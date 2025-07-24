@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-export cargo_dir="$(realpath "$(dirname "$0")")/.."
+cargo_dir="$(realpath "$(dirname "$0")")/.."
 cd "$cargo_dir"
 
 export RUST_BACKTRACE=1
