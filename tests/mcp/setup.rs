@@ -129,12 +129,14 @@ impl TestSetup {
         self
     }
 
-    async fn call_tool_ok(&self, params: CallToolRequestParam) -> Vec<TextOrJson> {
+    async fn call_tool(
+        &self,
+        params: CallToolRequestParam,
+    ) -> Result<Vec<TextOrJson>, Vec<TextOrJson>> {
         let resp = self.service.call_tool(params).await.expect("call tool");
 
-        assert!(!resp.is_error.unwrap_or_default());
-
-        resp.content
+        let data = resp
+            .content
             .into_iter()
             .map(|annotated| match annotated.raw {
                 RawContent::Text(raw_text_content) => {
@@ -151,36 +153,58 @@ impl TestSetup {
                 RawContent::Resource(_) => unimplemented!("resource content not supported"),
                 RawContent::Audio(_) => unimplemented!("audio content not supported"),
             })
-            .collect()
+            .collect();
+
+        if resp.is_error.unwrap_or_default() {
+            Err(data)
+        } else {
+            Ok(data)
+        }
     }
 
-    pub(crate) async fn find_symbol_ok(&self, args: JsonObject) -> Vec<TextOrJson> {
-        self.call_tool_ok(CallToolRequestParam {
+    pub(crate) async fn find_symbol(
+        &self,
+        args: JsonObject,
+    ) -> Result<Vec<TextOrJson>, Vec<TextOrJson>> {
+        self.call_tool(CallToolRequestParam {
             name: "find_symbol".into(),
             arguments: Some(args),
         })
         .await
     }
 
-    pub(crate) async fn symbol_info_ok(&self, args: JsonObject) -> Vec<String> {
-        self.call_tool_ok(CallToolRequestParam {
+    pub(crate) async fn find_symbol_ok(&self, args: JsonObject) -> Vec<TextOrJson> {
+        self.find_symbol(args).await.expect("no error")
+    }
+
+    pub(crate) async fn symbol_info(&self, args: JsonObject) -> Result<Vec<String>, Vec<String>> {
+        let map_data = |data: Vec<TextOrJson>| {
+            data.into_iter()
+                .map(|res| match res {
+                    TextOrJson::Text { text } => text,
+                    TextOrJson::Json(_) => panic!("expected non-JSON content"),
+                })
+                .collect()
+        };
+
+        self.call_tool(CallToolRequestParam {
             name: "symbol_info".into(),
             arguments: Some(args),
         })
         .await
-        .into_iter()
-        .map(|res| match res {
-            TextOrJson::Text(txt) => txt,
-            TextOrJson::Json(_) => panic!("expected non-JSON content"),
-        })
-        .collect()
+        .map(map_data)
+        .map_err(map_data)
+    }
+
+    pub(crate) async fn symbol_info_ok(&self, args: JsonObject) -> Vec<String> {
+        self.symbol_info(args).await.expect("no error")
     }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub(crate) enum TextOrJson {
-    Text(String),
+    Text { text: String },
     Json(JsonObject),
 }
 
@@ -188,7 +212,7 @@ impl From<String> for TextOrJson {
     fn from(s: String) -> Self {
         match serde_json::from_str::<JsonObject>(&s) {
             Ok(obj) => Self::Json(obj),
-            Err(_) => Self::Text(s),
+            Err(_) => Self::Text { text: s },
         }
     }
 }

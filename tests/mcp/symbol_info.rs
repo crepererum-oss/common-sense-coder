@@ -21,7 +21,7 @@ async fn test_info_for_all_in_file() {
         writeln!(&mut snapshot).unwrap();
 
         let (name, line, character) = match symbol {
-            TextOrJson::Text(_) => panic!("should be JSON"),
+            TextOrJson::Text { .. } => panic!("should be JSON"),
             TextOrJson::Json(map) => {
                 let name = map
                     .get("name")
@@ -515,7 +515,7 @@ async fn test_foreign_symbol() {
         .await
         .into_iter()
         .map(|res| match res {
-            TextOrJson::Text(_) => panic!("should be JSON"),
+            TextOrJson::Text { .. } => panic!("should be JSON"),
             TextOrJson::Json(map) => map
                 .get("file")
                 .expect("file")
@@ -577,4 +577,19 @@ async fn test_foreign_symbol() {
     References:
     - src/lib.rs:2:21
     ");
+}
+
+#[tokio::test]
+async fn test_file_not_found() {
+    let setup = TestSetup::new().await.with_normalize_paths(false);
+
+    let results = setup
+        .symbol_info(map([
+            ("file", json!("does_not_exist.rs")),
+            ("name", json!("foo")),
+        ]))
+        .await
+        .unwrap_err();
+    let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
+    insta::assert_snapshot!(results, @"file not found: does_not_exist.rs");
 }

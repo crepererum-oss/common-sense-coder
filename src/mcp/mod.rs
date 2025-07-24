@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{io::ErrorKind, path::Path, sync::Arc};
 
 use anyhow::Context;
 use error::{OptionExt, ResultExt};
@@ -98,6 +98,14 @@ impl CodeExplorer {
         }
     }
 
+    async fn read_file(&self, file: &str) -> Result<Option<String>, McpError> {
+        match tokio::fs::read_to_string(self.workspace.join(file)).await {
+            Ok(s) => Ok(Some(s)),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e).context("read file").internal(),
+        }
+    }
+
     #[tool(
         description = "Find symbol (e.g. a struct, enum, method, ...) in code base. Use the `symbol_info` tool afterwards to learn more about the found symbols."
     )]
@@ -120,6 +128,16 @@ impl CodeExplorer {
 
         let symbol_informations = match file {
             Some(file) => {
+                // LSP may error for non-existing files, so try to read it first
+                match self.read_file(&file).await? {
+                    Some(_) => {}
+                    None => {
+                        return Ok(CallToolResult::error(vec![Content::text(format!(
+                            "file not found: {file}"
+                        ))]));
+                    }
+                }
+
                 let resp = client
                     .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
                         text_document: TextDocumentIdentifier {
@@ -132,8 +150,12 @@ impl CodeExplorer {
                     })
                     .await
                     .context("DocumentSymbolRequest")
-                    .internal()?
-                    .not_found(file)?;
+                    .internal()?;
+
+                let Some(resp) = resp else {
+                    // no symbols
+                    return Ok(CallToolResult::success(vec![]));
+                };
 
                 match resp {
                     DocumentSymbolResponse::Flat(symbol_informations) => symbol_informations,
@@ -154,8 +176,12 @@ impl CodeExplorer {
                     })
                     .await
                     .context("WorkspaceSymbolRequest")
-                    .internal()?
-                    .not_found(query.clone())?;
+                    .internal()?;
+
+                let Some(resp) = resp else {
+                    // no symbols
+                    return Ok(CallToolResult::success(vec![]));
+                };
 
                 match resp {
                     WorkspaceSymbolResponse::Flat(symbol_informations) => symbol_informations,
@@ -277,6 +303,14 @@ impl CodeExplorer {
 
         let workspace_and_dependencies = workspace_and_dependencies.unwrap_or_default();
 
+        let file_content = match self.read_file(&file).await? {
+            Some(s) => s,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "file not found: {file}"
+                ))]));
+            }
+        };
         let resp = client
             .send_request::<SemanticTokensFullRequest>(SemanticTokensParams {
                 text_document: path_to_text_document_identifier(&self.workspace, &file)
@@ -288,11 +322,7 @@ impl CodeExplorer {
             .await
             .context("SemanticTokensFullRequest")
             .internal()?
-            .not_found(file.clone())?;
-        let file_content = tokio::fs::read_to_string(self.workspace.join(&file))
-            .await
-            .context("read file")
-            .internal()?;
+            .expected("language server did not provide any semantic tokens".to_owned())?;
         let doc = match resp {
             lsp_types::SemanticTokensResult::Tokens(semantic_tokens) => self
                 .token_legend

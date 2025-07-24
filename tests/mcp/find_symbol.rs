@@ -307,6 +307,20 @@ async fn test_file() {
     ]
     "#
     );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol(map([
+            ("file", json!("does_not_exist.rs")),
+        ])).await.unwrap_err(),
+        @r#"
+    [
+      {
+        "type": "text",
+        "text": "file not found: does_not_exist.rs"
+      }
+    ]
+    "#,
+    );
 }
 
 #[tokio::test]

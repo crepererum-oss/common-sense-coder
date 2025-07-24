@@ -58,22 +58,22 @@ where
 pub(crate) trait OptionExt {
     type T;
 
-    /// A value was expected, treat [`None`] as [not found](McpError::resource_not_found).
-    fn not_found(self, what: String) -> Result<Self::T, McpError>;
-
     /// A value is required.
     fn required(self, what: String) -> Result<Self::T, McpError>;
+
+    /// Internally we've expected this `Option` to have data.
+    fn expected(self, what: String) -> Result<Self::T, McpError>;
 }
 
 impl<T> OptionExt for Option<T> {
     type T = T;
 
-    fn not_found(self, what: String) -> Result<Self::T, McpError> {
-        self.ok_or_else(|| McpError::resource_not_found(what, None))
-    }
-
     fn required(self, what: String) -> Result<Self::T, McpError> {
         self.ok_or_else(|| McpError::invalid_params(format!("{what} is required"), None))
+    }
+
+    fn expected(self, what: String) -> Result<Self::T, McpError> {
+        self.ok_or_else(|| McpError::invalid_params(what, None))
     }
 }
 
