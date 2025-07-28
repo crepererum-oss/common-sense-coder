@@ -2,6 +2,7 @@
 use anyhow as _;
 use clap as _;
 use dotenvy as _;
+use futures as _;
 use insta as _;
 use itertools as _;
 use lsp_client as _;
@@ -10,6 +11,7 @@ use rmcp as _;
 use serde as _;
 use serde_json as _;
 use tokio as _;
+use tokio_stream as _;
 use tracing as _;
 use tracing_log as _;
 use tracing_subscriber as _;

@@ -14,7 +14,7 @@ use tokio::{
     process::{Child, Command},
     task::JoinSet,
 };
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::{
     constants::{NAME, VERSION_STRING},
@@ -45,9 +45,10 @@ pub(crate) async fn spawn_lsp(
         Stdio::inherit()
     };
 
-    let mut child = Command::new(quirks.language_server())
+    let mut child = Command::new(quirks.language_server_binary())
         .current_dir(workspace)
         .kill_on_drop(true)
+        .envs(quirks.language_server_env())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(stderr)
@@ -75,7 +76,7 @@ pub(crate) async fn init_lsp(
     workspace: &Path,
     quirks: &Arc<dyn ProgrammingLanguageQuirks>,
 ) -> Result<TokenLegend> {
-    info!("init LSP");
+    debug!("initializing LSP");
 
     let init_results = client
         .initialize(InitializeParams {
@@ -184,7 +185,7 @@ pub(crate) async fn init_lsp(
             );
 
             // set up legend
-            TokenLegend::new(semantic_tokens_options.legend)
+            TokenLegend::new(semantic_tokens_options.legend, quirks)
         }
         SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(_) => {
             bail!("dynamic token registration not supported");
@@ -193,7 +194,14 @@ pub(crate) async fn init_lsp(
 
     client.initialized().await.context("set init response")?;
 
-    info!("LSP initialized");
+    let server_info = init_results.server_info;
+    info!(
+        server_name = server_info.as_ref().map(|info| info.name.as_str()),
+        server_version = server_info
+            .as_ref()
+            .and_then(|info| info.version.as_deref()),
+        "LSP initialized"
+    );
 
     Ok(token_legend)
 }

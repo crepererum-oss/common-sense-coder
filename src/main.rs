@@ -83,13 +83,16 @@ async fn main() -> Result<()> {
 
     let mut tasks = JoinSet::new();
 
-    let workspace = Arc::from(
+    let workspace = Arc::<Path>::from(
         args.workspace
             .canonicalize()
             .context("canonicalize workspace path")?,
     );
+    info!(path=%workspace.display(), "workspace");
 
     if let Some(intercept_io) = &args.intercept_io {
+        info!(path=%intercept_io.display(), "interception IO");
+
         tokio::fs::create_dir_all(intercept_io)
             .await
             .context("create directories for IO interception")?;

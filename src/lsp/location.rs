@@ -9,6 +9,7 @@ use lsp_types::{
     GotoDefinitionResponse, Location, LocationLink, Position, TextDocumentIdentifier,
     TextDocumentPositionParams, Uri,
 };
+use serde::Serialize;
 
 #[derive(Debug)]
 pub(crate) enum LocationVariants {
@@ -29,7 +30,6 @@ impl LocationVariants {
                     .map(|loc| loc.to_string())
                     .unwrap_or_default()
             }
-            Self::Array(locations) if locations.is_empty() => "None".to_owned(),
             Self::Array(locations) => {
                 let locations = locations
                     .into_iter()
@@ -44,9 +44,13 @@ impl LocationVariants {
                     .map(|res| res.map(|loc| format!("- {loc}")))
                     .collect::<Result<Vec<_>, _>>()
                     .context("format locations")?;
-                locations.join("\n")
+
+                if locations.is_empty() {
+                    "None".to_owned()
+                } else {
+                    locations.join("\n")
+                }
             }
-            Self::Link(location_links) if location_links.is_empty() => "None".to_owned(),
             Self::Link(location_links) => {
                 let locations = location_links
                     .into_iter()
@@ -61,7 +65,12 @@ impl LocationVariants {
                     .map(|res| res.map(|loc| format!("- {loc}")))
                     .collect::<Result<Vec<_>, _>>()
                     .context("format locations")?;
-                locations.join("\n")
+
+                if locations.is_empty() {
+                    "None".to_owned()
+                } else {
+                    locations.join("\n")
+                }
             }
         })
     }
@@ -77,11 +86,13 @@ impl From<GotoDefinitionResponse> for LocationVariants {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub(crate) struct McpLocation {
     pub(crate) file: String,
     pub(crate) line: u32,
     pub(crate) character: u32,
+
+    #[serde(skip_serializing)]
     pub(crate) workspace: Arc<Path>,
 }
 
@@ -138,13 +149,8 @@ impl McpLocation {
 
 impl std::fmt::Display for McpLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self {
-            file,
-            line,
-            character,
-            workspace: _,
-        } = self;
-        write!(f, "{file}:{line}:{character}")
+        let s = serde_json::to_string(self).expect("always works");
+        write!(f, "{s}")
     }
 }
 

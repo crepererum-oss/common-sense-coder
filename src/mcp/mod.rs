@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{io::ErrorKind, path::Path, sync::Arc};
 
 use anyhow::Context;
 use error::{OptionExt, ResultExt};
@@ -16,21 +16,27 @@ use lsp_types::{
     },
 };
 use rmcp::{
-    ServerHandler,
-    handler::server::tool::{Parameters, ToolRouter},
+    RoleServer, ServerHandler,
+    handler::server::tool::{Parameters, ToolCallContext, ToolRouter},
     model::{
-        CallToolResult, Content, ErrorData as McpError, Implementation, ServerCapabilities,
+        CallToolRequestParam, CallToolResult, Content, ErrorData as McpError, Implementation,
+        ListToolsResult, PaginatedRequestParam, ProgressNotificationParam, ServerCapabilities,
         ServerInfo,
     },
-    schemars, tool, tool_handler, tool_router,
+    schemars,
+    service::RequestContext,
+    tool, tool_router,
 };
 use search::SearchMode;
+use tokio_stream::StreamExt;
+use tracing::{debug, info};
 
 use crate::{
     ProgressGuard,
     constants::{NAME, VERSION_STRING},
     lsp::{
         location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri},
+        progress_guard::Guard,
         tokens::{Token, TokenLegend},
     },
 };
@@ -61,29 +67,81 @@ impl CodeExplorer {
         }
     }
 
-    #[tool(description = "find symbol (e.g. a struct, enum, method, ...) in code base")]
+    async fn wait_for_client(&self, ctx: RequestContext<RoleServer>) -> Guard<'_> {
+        let fut_progress = async {
+            if let Some(progress_token) = ctx.meta.get_progress_token() {
+                let mut stream_evt = self.progress_guard.events();
+                let mut progress = 0;
+
+                while let Some(evt) = stream_evt.next().await {
+                    ctx.peer
+                        .notify_progress(ProgressNotificationParam {
+                            progress_token: progress_token.clone(),
+                            progress,
+                            total: None,
+                            message: Some(evt),
+                        })
+                        .await
+                        .ok();
+                    progress += 1;
+                }
+            }
+
+            futures::future::pending::<()>().await
+        };
+
+        let fut_wait = async { self.progress_guard.wait().await };
+
+        tokio::select! {
+            _ = fut_progress => unreachable!(),
+            guard = fut_wait => guard,
+        }
+    }
+
+    async fn read_file(&self, file: &str) -> Result<Option<String>, McpError> {
+        match tokio::fs::read_to_string(self.workspace.join(file)).await {
+            Ok(s) => Ok(Some(s)),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e).context("read file").internal(),
+        }
+    }
+
+    #[tool(
+        description = "Find symbol (e.g. a struct, enum, method, ...) in code base. Use the `symbol_info` tool afterwards to learn more about the found symbols."
+    )]
     async fn find_symbol(
         &self,
         Parameters(FindSymbolRequest {
             query,
-            path,
+            file,
             fuzzy,
-            workspace_and_dependencies,
+            workspace_and_dependencies: workspace_and_dependencies_orig,
         }): Parameters<FindSymbolRequest>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let client = self.progress_guard.wait().await;
+        let client = self.wait_for_client(ctx).await;
 
         let query = empty_string_to_none(query);
-        let path = empty_string_to_none(path);
+        let file = empty_string_to_none(file);
         let fuzzy = fuzzy.unwrap_or_default();
-        let workspace_and_dependencies = workspace_and_dependencies.unwrap_or_default();
+        let workspace_and_dependencies = workspace_and_dependencies_orig.unwrap_or_default();
 
-        let symbol_informations = match path {
-            Some(path) => {
+        let symbol_informations = match file {
+            Some(file) => {
+                // LSP may error for non-existing files, so try to read it first
+                match self.read_file(&file).await? {
+                    Some(_) => {}
+                    None => {
+                        return Ok(CallToolResult::error(vec![Content::text(format!(
+                            "file not found: {file}"
+                        ))]));
+                    }
+                }
+
                 let resp = client
                     .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
                         text_document: TextDocumentIdentifier {
-                            uri: path_to_uri(&self.workspace, &path)
+                            uri: path_to_uri(&self.workspace, &file)
                                 .context("convert path to URI")
                                 .internal()?,
                         },
@@ -92,8 +150,12 @@ impl CodeExplorer {
                     })
                     .await
                     .context("DocumentSymbolRequest")
-                    .internal()?
-                    .not_found(path)?;
+                    .internal()?;
+
+                let Some(resp) = resp else {
+                    // no symbols
+                    return Ok(CallToolResult::success(vec![]));
+                };
 
                 match resp {
                     DocumentSymbolResponse::Flat(symbol_informations) => symbol_informations,
@@ -114,8 +176,12 @@ impl CodeExplorer {
                     })
                     .await
                     .context("WorkspaceSymbolRequest")
-                    .internal()?
-                    .not_found(query.clone())?;
+                    .internal()?;
+
+                let Some(resp) = resp else {
+                    // no symbols
+                    return Ok(CallToolResult::success(vec![]));
+                };
 
                 match resp {
                     WorkspaceSymbolResponse::Flat(symbol_informations) => symbol_informations,
@@ -134,12 +200,40 @@ impl CodeExplorer {
         } else {
             SearchMode::Exact
         };
-        let response = symbol_informations
+        let mut results = self.filter_symbol_informations(
+            &symbol_informations,
+            query.as_deref(),
+            mode,
+            workspace_and_dependencies,
+        )?;
+        if results.is_empty() && workspace_and_dependencies_orig.is_none() {
+            debug!("auto-expand scope to workspace_and_dependencies");
+            results = self.filter_symbol_informations(
+                &symbol_informations,
+                query.as_deref(),
+                mode,
+                true,
+            )?;
+        }
+        let results = results
             .into_iter()
+            .map(Content::json)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(CallToolResult::success(results))
+    }
+
+    fn filter_symbol_informations(
+        &self,
+        symbol_informations: &[SymbolInformation],
+        query: Option<&str>,
+        mode: SearchMode,
+        workspace_and_dependencies: bool,
+    ) -> Result<Vec<SymbolResult>, McpError> {
+        symbol_informations
+            .iter()
             // rust-analyzer search is fuzzy by default
             .filter(|si| {
                 query
-                    .as_deref()
                     .map(|query| (mode.check(query, &si.name)))
                     .unwrap_or(true)
             })
@@ -154,7 +248,10 @@ impl CodeExplorer {
 
                 let kind = format!("{kind:?}");
 
-                let deprecated = tags.unwrap_or_default().contains(&SymbolTag::DEPRECATED);
+                let deprecated = tags
+                    .as_ref()
+                    .map(|tags| tags.contains(&SymbolTag::DEPRECATED))
+                    .unwrap_or_default();
 
                 let McpLocation {
                     file,
@@ -162,7 +259,7 @@ impl CodeExplorer {
                     character,
                     workspace: _,
                 } = match McpLocation::try_new(
-                    location,
+                    location.clone(),
                     Arc::clone(&self.workspace),
                     workspace_and_dependencies,
                 )
@@ -175,41 +272,48 @@ impl CodeExplorer {
                     }
                 };
 
-                let sr = SymbolResult {
-                    name,
+                Ok(Some(SymbolResult {
+                    name: name.to_owned(),
                     kind,
                     deprecated,
                     file,
                     line,
                     character,
-                };
-                let content = Content::json(sr)?;
-                Ok(Some(content))
+                }))
             })
             .filter_map(Result::transpose)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(CallToolResult::success(response))
+            .collect::<Result<Vec<_>, _>>()
     }
 
-    #[tool(description = "get information to given symbol")]
+    #[tool(
+        description = "Get detailed information about a given symbol (struct, enum, method, trait, ...) like documentation, declaration, references, usage across the code base, etc."
+    )]
     async fn symbol_info(
         &self,
         Parameters(SymbolInfoRequest {
-            path,
+            file,
             name,
             line,
             character,
             workspace_and_dependencies,
         }): Parameters<SymbolInfoRequest>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let client = self.progress_guard.wait().await;
+        let client = self.wait_for_client(ctx).await;
 
         let workspace_and_dependencies = workspace_and_dependencies.unwrap_or_default();
 
+        let file_content = match self.read_file(&file).await? {
+            Some(s) => s,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "file not found: {file}"
+                ))]));
+            }
+        };
         let resp = client
             .send_request::<SemanticTokensFullRequest>(SemanticTokensParams {
-                text_document: path_to_text_document_identifier(&self.workspace, &path)
+                text_document: path_to_text_document_identifier(&self.workspace, &file)
                     .context("convert path to text document identifier")
                     .internal()?,
                 work_done_progress_params: Default::default(),
@@ -218,15 +322,11 @@ impl CodeExplorer {
             .await
             .context("SemanticTokensFullRequest")
             .internal()?
-            .not_found(path.clone())?;
-        let file = tokio::fs::read_to_string(self.workspace.join(&path))
-            .await
-            .context("read file")
-            .internal()?;
+            .expected("language server did not provide any semantic tokens".to_owned())?;
         let doc = match resp {
             lsp_types::SemanticTokensResult::Tokens(semantic_tokens) => self
                 .token_legend
-                .decode(&file, semantic_tokens.data)
+                .decode(&file_content, semantic_tokens.data)
                 .context("decode semantic tokens")
                 .internal()?,
             lsp_types::SemanticTokensResult::Partial(_) => {
@@ -239,10 +339,13 @@ impl CodeExplorer {
         let tokens = doc.query(&name, line, character);
         let mut results = vec![];
         for token in tokens {
-            results.push(Content::text(
-                self.symbol_info_for_token(token, &path, &client, workspace_and_dependencies)
-                    .await?,
-            ));
+            let Some(res) = self
+                .symbol_info_for_token(token, &file, &client, workspace_and_dependencies)
+                .await?
+            else {
+                continue;
+            };
+            results.push(Content::text(res));
         }
 
         Ok(CallToolResult::success(results))
@@ -254,30 +357,40 @@ impl CodeExplorer {
         path: &str,
         client: &LspClient,
         workspace_and_dependencies: bool,
-    ) -> Result<String, McpError> {
+    ) -> Result<Option<String>, McpError> {
         let location = token.location(path.to_owned(), Arc::clone(&self.workspace));
+
+        let modifiers = token
+            .token_modifiers()
+            .iter()
+            .map(|m| m.to_string())
+            .join(", ");
+        let modifiers = if modifiers.is_empty() {
+            "none".to_owned()
+        } else {
+            modifiers
+        };
 
         let mut sections = vec![format!(
             "Token:\n\n- location: {location}\n- type: {}\n- modifiers: {}",
             token.token_type(),
-            token
-                .token_modifers()
-                .iter()
-                .map(|m| m.to_string())
-                .join(", "),
+            modifiers,
         )];
 
         let text_document_position_params = TextDocumentPositionParams::try_from(&location)
             .context("create text document position params")
             .internal()?;
-        let resp = client
+        let Some(resp) = client
             .send_request::<HoverRequest>(HoverParams {
                 text_document_position_params: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
             })
             .await
+            .context("HoverRequest")
             .internal()?
-            .not_found(location.to_string())?;
+        else {
+            return Ok(None);
+        };
 
         sections.extend(match resp.contents {
             HoverContents::Scalar(markup_string) => {
@@ -297,10 +410,11 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("GotoDeclaration")
             .internal()?
         {
             sections.push(format!(
-                "Declaration:\n{}",
+                "Declarations:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)
                     .context("format location variants")
@@ -315,10 +429,11 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("GotoDefinition")
             .internal()?
         {
             sections.push(format!(
-                "Definition:\n{}",
+                "Definitions:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)
                     .context("format location variants")
@@ -333,10 +448,11 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("GotoImplementation")
             .internal()?
         {
             sections.push(format!(
-                "Implementation:\n{}",
+                "Implementations:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)
                     .context("format location variants")
@@ -351,10 +467,11 @@ impl CodeExplorer {
                 partial_result_params: Default::default(),
             })
             .await
+            .context("GotoTypeDefinition")
             .internal()?
         {
             sections.push(format!(
-                "Type Definition:\n{}",
+                "Type Definitions:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)
                     .context("format location variants")
@@ -372,6 +489,7 @@ impl CodeExplorer {
                 },
             })
             .await
+            .context("References")
             .internal()?
         {
             let locations = locations
@@ -395,7 +513,7 @@ impl CodeExplorer {
             sections.push(format!("References:\n{locations}"));
         }
 
-        Ok(sections.join("\n\n---\n\n"))
+        Ok(Some(sections.join("\n\n---\n\n")))
     }
 }
 
@@ -409,9 +527,9 @@ struct FindSymbolRequest {
 
     #[schemars(
         description = "path to the file, otherwise search the entire workspace",
-        default
+        length(min = 1)
     )]
-    path: Option<String>,
+    file: Option<String>,
 
     #[schemars(description = "search fuzzy")]
     fuzzy: Option<bool>,
@@ -432,8 +550,8 @@ struct SymbolResult {
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 struct SymbolInfoRequest {
-    #[schemars(description = "path to the file")]
-    path: String,
+    #[schemars(description = "path to the file, can be absolute or relative")]
+    file: String,
 
     #[schemars(description = "symbol name")]
     name: String,
@@ -447,7 +565,7 @@ struct SymbolInfoRequest {
     )]
     character: Option<u32>,
 
-    #[schemars(description = "search workspace and dependencies", default)]
+    #[schemars(description = "search workspace and dependencies")]
     workspace_and_dependencies: Option<bool>,
 }
 
@@ -464,7 +582,6 @@ fn empty_string_to_none(s: Option<String>) -> Option<String> {
     s.and_then(|s| (!s.is_empty()).then_some(s))
 }
 
-#[tool_handler]
 impl ServerHandler for CodeExplorer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
@@ -474,7 +591,34 @@ impl ServerHandler for CodeExplorer {
                 name: NAME.to_owned(),
                 version: VERSION_STRING.to_owned(),
             },
-            instructions: Some("A code exporer".into()),
+            instructions: Some("\
+                This server helps you to understand a code base.\
+                \
+                It comes with two tools:\
+                - `find_symbols`: Searches symbols (structs, enums, methods, traits, ...) defined/used by the code base.\
+                - `symbol_info`: Provides detailed information about a symbol like documentation and usage pattern.\
+                \
+                First use the `find_symbols` tool to get the file path of the respective symbol. Then use the `symbol_info` tool to get the detailed information about them.\
+            ".trim().to_owned()),
         }
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        info!(name = request.name.as_ref(), "call tool");
+        let tcc = ToolCallContext::new(self, request, context);
+        self.tool_router.call(tcc).await
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        let items = self.tool_router.list_all();
+        Ok(ListToolsResult::with_all_items(items))
     }
 }
