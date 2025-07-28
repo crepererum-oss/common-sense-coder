@@ -414,7 +414,7 @@ impl CodeExplorer {
             .internal()?
         {
             sections.push(format!(
-                "Declaration:\n{}",
+                "Declarations:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)
                     .context("format location variants")
@@ -433,7 +433,7 @@ impl CodeExplorer {
             .internal()?
         {
             sections.push(format!(
-                "Definition:\n{}",
+                "Definitions:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)
                     .context("format location variants")
@@ -452,7 +452,7 @@ impl CodeExplorer {
             .internal()?
         {
             sections.push(format!(
-                "Implementation:\n{}",
+                "Implementations:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)
                     .context("format location variants")
@@ -471,7 +471,7 @@ impl CodeExplorer {
             .internal()?
         {
             sections.push(format!(
-                "Type Definition:\n{}",
+                "Type Definitions:\n{}",
                 LocationVariants::from(resp)
                     .format(Arc::clone(&self.workspace), workspace_and_dependencies)
                     .context("format location variants")

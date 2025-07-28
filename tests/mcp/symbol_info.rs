@@ -62,7 +62,7 @@ async fn test_info_for_all_in_file() {
         }
     }
 
-    insta::assert_snapshot!(snapshot, @r"
+    insta::assert_snapshot!(snapshot, @r#"
     ==========
 
     Inputs:
@@ -75,7 +75,7 @@ async fn test_info_for_all_in_file() {
 
     Token:
 
-    - location: src/lib.rs:4:5
+    - location: {"file":"src/lib.rs","line":4,"character":5}
     - type: namespace
     - modifiers: declaration
 
@@ -91,28 +91,28 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:4:5
+    Declarations:
+    - {"file":"src/lib.rs","line":4,"character":5}
 
     ---
 
-    Definition:
-    - src/sub.rs:1:1
+    Definitions:
+    - {"file":"src/sub.rs","line":1,"character":1}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:1:12
+    - {"file":"src/lib.rs","line":1,"character":12}
 
     ==========
 
@@ -126,7 +126,7 @@ async fn test_info_for_all_in_file() {
 
     Token:
 
-    - location: src/lib.rs:13:8
+    - location: {"file":"src/lib.rs","line":13,"character":8}
     - type: function
     - modifiers: declaration, public
 
@@ -152,22 +152,22 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:13:8
+    Declarations:
+    - {"file":"src/lib.rs","line":13,"character":8}
 
     ---
 
-    Definition:
-    - src/lib.rs:13:8
+    Definitions:
+    - {"file":"src/lib.rs","line":13,"character":8}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
@@ -187,7 +187,7 @@ async fn test_info_for_all_in_file() {
 
     Token:
 
-    - location: src/lib.rs:14:9
+    - location: {"file":"src/lib.rs","line":14,"character":9}
     - type: variable
     - modifiers: declaration
 
@@ -199,28 +199,28 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:14:9
+    Declarations:
+    - {"file":"src/lib.rs","line":14,"character":9}
 
     ---
 
-    Definition:
-    - src/lib.rs:14:9
+    Definitions:
+    - {"file":"src/lib.rs","line":14,"character":9}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:15:16
+    - {"file":"src/lib.rs","line":15,"character":16}
 
     ==========
 
@@ -234,7 +234,7 @@ async fn test_info_for_all_in_file() {
 
     Token:
 
-    - location: src/lib.rs:15:9
+    - location: {"file":"src/lib.rs","line":15,"character":9}
     - type: variable
     - modifiers: declaration
 
@@ -246,28 +246,28 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:15:9
+    Declarations:
+    - {"file":"src/lib.rs","line":15,"character":9}
 
     ---
 
-    Definition:
-    - src/lib.rs:15:9
+    Definitions:
+    - {"file":"src/lib.rs","line":15,"character":9}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:16:16
+    - {"file":"src/lib.rs","line":16,"character":16}
 
     ==========
 
@@ -281,7 +281,7 @@ async fn test_info_for_all_in_file() {
 
     Token:
 
-    - location: src/lib.rs:16:9
+    - location: {"file":"src/lib.rs","line":16,"character":9}
     - type: variable
     - modifiers: declaration
 
@@ -293,28 +293,28 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:16:9
+    Declarations:
+    - {"file":"src/lib.rs","line":16,"character":9}
 
     ---
 
-    Definition:
-    - src/lib.rs:16:9
+    Definitions:
+    - {"file":"src/lib.rs","line":16,"character":9}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:17:5
+    - {"file":"src/lib.rs","line":17,"character":5}
 
     ==========
 
@@ -328,7 +328,7 @@ async fn test_info_for_all_in_file() {
 
     Token:
 
-    - location: src/lib.rs:21:4
+    - location: {"file":"src/lib.rs","line":21,"character":4}
     - type: function
     - modifiers: declaration
 
@@ -348,29 +348,29 @@ async fn test_info_for_all_in_file() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:21:4
+    Declarations:
+    - {"file":"src/lib.rs","line":21,"character":4}
 
     ---
 
-    Definition:
-    - src/lib.rs:21:4
+    Definitions:
+    - {"file":"src/lib.rs","line":21,"character":4}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:16:41
-    ");
+    - {"file":"src/lib.rs","line":16,"character":41}
+    "#);
 }
 
 #[tokio::test]
@@ -383,10 +383,10 @@ async fn test_multi_match() {
         .symbol_info_ok(map([("file", json!(file)), ("name", json!("accu"))]))
         .await;
     let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
-    insta::assert_snapshot!(results, @r"
+    insta::assert_snapshot!(results, @r#"
     Token:
 
-    - location: src/lib.rs:14:9
+    - location: {"file":"src/lib.rs","line":14,"character":9}
     - type: variable
     - modifiers: declaration
 
@@ -398,34 +398,34 @@ async fn test_multi_match() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:14:9
+    Declarations:
+    - {"file":"src/lib.rs","line":14,"character":9}
 
     ---
 
-    Definition:
-    - src/lib.rs:14:9
+    Definitions:
+    - {"file":"src/lib.rs","line":14,"character":9}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:15:16
+    - {"file":"src/lib.rs","line":15,"character":16}
 
     ==========
 
     Token:
 
-    - location: src/lib.rs:15:9
+    - location: {"file":"src/lib.rs","line":15,"character":9}
     - type: variable
     - modifiers: declaration
 
@@ -437,34 +437,34 @@ async fn test_multi_match() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:15:9
+    Declarations:
+    - {"file":"src/lib.rs","line":15,"character":9}
 
     ---
 
-    Definition:
-    - src/lib.rs:15:9
+    Definitions:
+    - {"file":"src/lib.rs","line":15,"character":9}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:16:16
+    - {"file":"src/lib.rs","line":16,"character":16}
 
     ==========
 
     Token:
 
-    - location: src/lib.rs:16:9
+    - location: {"file":"src/lib.rs","line":16,"character":9}
     - type: variable
     - modifiers: declaration
 
@@ -476,29 +476,29 @@ async fn test_multi_match() {
 
     ---
 
-    Declaration:
-    - src/lib.rs:16:9
+    Declarations:
+    - {"file":"src/lib.rs","line":16,"character":9}
 
     ---
 
-    Definition:
-    - src/lib.rs:16:9
+    Definitions:
+    - {"file":"src/lib.rs","line":16,"character":9}
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:17:5
-    ");
+    - {"file":"src/lib.rs","line":17,"character":5}
+    "#);
 }
 
 #[tokio::test]
@@ -535,10 +535,10 @@ async fn test_foreign_symbol() {
         .symbol_info_ok(map([("file", json!(file)), ("name", json!(name))]))
         .await;
     let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
-    insta::assert_snapshot!(results, @r"
+    insta::assert_snapshot!(results, @r#"
     Token:
 
-    - location: /fixtures/dependency_lib/src/lib.rs:1:8
+    - location: {"file":"/fixtures/dependency_lib/src/lib.rs","line":1,"character":8}
     - type: function
     - modifiers: declaration, public
 
@@ -554,29 +554,29 @@ async fn test_foreign_symbol() {
 
     ---
 
-    Declaration:
+    Declarations:
     None
 
     ---
 
-    Definition:
+    Definitions:
     None
 
     ---
 
-    Implementation:
+    Implementations:
     None
 
     ---
 
-    Type Definition:
+    Type Definitions:
     None
 
     ---
 
     References:
-    - src/lib.rs:2:21
-    ");
+    - {"file":"src/lib.rs","line":2,"character":21}
+    "#);
 }
 
 #[tokio::test]
