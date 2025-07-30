@@ -1,0 +1,33 @@
+<svg width="180" height="80" viewBox="0 0 180 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="0" y="0" width="180" height="80" fill="#fbbf24"/>
+  
+  <!-- Letter C (left) - geometric design -->
+  <g transform="translate(22, 40)">
+    <rect x="0" y="-18" width="6.5" height="36" fill="#b91c1c"/>
+    <rect x="0" y="-18" width="18" height="6.5" fill="#b91c1c"/>
+    <rect x="0" y="11.5" width="18" height="6.5" fill="#b91c1c"/>
+  </g>
+  
+  <!-- Letter S (center) - geometric design -->
+  <g transform="translate(81, 40)">
+    <rect x="0" y="-18" width="18" height="6.5" fill="#7c3aed"/>
+    <rect x="0" y="-18" width="6.5" height="10" fill="#7c3aed"/>
+    <rect x="0" y="-10" width="18" height="6.5" fill="#7c3aed"/>
+    <rect x="11.5" y="-10" width="6.5" height="10" fill="#7c3aed"/>
+    <rect x="0" y="0" width="18" height="6.5" fill="#7c3aed"/>
+    <rect x="11.5" y="0" width="6.5" height="18" fill="#7c3aed"/>
+    <rect x="0" y="11.5" width="18" height="6.5" fill="#7c3aed"/>
+  </g>
+  
+  <!-- Letter C (right) - geometric design -->
+  <g transform="translate(140, 40)">
+    <rect x="11.5" y="-18" width="6.5" height="36" fill="#b91c1c"/>
+    <rect x="0" y="-18" width="18" height="6.5" fill="#b91c1c"/>
+    <rect x="0" y="11.5" width="18" height="6.5" fill="#b91c1c"/>
+  </g>
+  
+  <!-- Subtle connection lines -->
+  <rect x="46" y="38" width="29" height="4" fill="#525252"/>
+  <rect x="105" y="38" width="29" height="4" fill="#525252"/>
+</svg>
