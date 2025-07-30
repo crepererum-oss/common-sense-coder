@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://github.com/crepererum-oss/common-sense-coder">
+    <img src="https://raw.githubusercontent.com/crepererum-oss/common-sense-coder/refs/heads/main/logo.svg" width=500 />
+  </a>
+</p>
+
 # Common Sense Coder
 An [LSP]-[MCP] bridge for code assistants.
 
