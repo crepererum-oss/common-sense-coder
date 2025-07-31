@@ -8,6 +8,7 @@ use lsp_client as _;
 use lsp_types as _;
 use predicates as _;
 use tokio_stream as _;
+use tokio_util as _;
 use tracing as _;
 use tracing_log as _;
 use tracing_subscriber as _;

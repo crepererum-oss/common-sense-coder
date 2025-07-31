@@ -10,13 +10,11 @@ use lsp_types::{
     TextDocumentClientCapabilities, TextDocumentSyncClientCapabilities, WindowClientCapabilities,
     WorkspaceClientCapabilities, WorkspaceFolder, WorkspaceSymbolClientCapabilities,
 };
-use tokio::{
-    process::{Child, Command},
-    task::JoinSet,
-};
+use tokio::process::{Child, Command};
 use tracing::{debug, info};
 
 use crate::{
+    TaskManager,
     constants::{NAME, VERSION_STRING},
     io_intercept::{BoxRead, BoxWrite, ReadFork, WriteFork},
     lang::ProgrammingLanguageQuirks,
@@ -28,7 +26,7 @@ pub(crate) async fn spawn_lsp(
     quirks: &Arc<dyn ProgrammingLanguageQuirks>,
     intercept_io: Option<&Path>,
     workspace: &Path,
-    tasks: &mut JoinSet<Result<()>>,
+    tasks: &mut TaskManager,
 ) -> Result<(Arc<LspClient>, Child)> {
     let stderr = if let Some(intercept_io) = intercept_io {
         Stdio::from(

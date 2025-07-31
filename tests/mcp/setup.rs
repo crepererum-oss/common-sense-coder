@@ -18,6 +18,7 @@ use tokio::process::Command;
 #[derive(Debug)]
 struct InterceptIoDir {
     dir: TempDir,
+    disable_cleanup: Option<bool>,
 }
 
 impl InterceptIoDir {
@@ -31,7 +32,10 @@ impl InterceptIoDir {
         };
         println!("intercept IO: {}", dir.path().display());
 
-        Self { dir }
+        Self {
+            dir,
+            disable_cleanup: None,
+        }
     }
 }
 
@@ -45,7 +49,8 @@ impl Deref for InterceptIoDir {
 
 impl Drop for InterceptIoDir {
     fn drop(&mut self) {
-        self.dir.disable_cleanup(std::thread::panicking());
+        self.dir
+            .disable_cleanup(self.disable_cleanup.unwrap_or(std::thread::panicking()));
     }
 }
 
@@ -54,13 +59,14 @@ impl Drop for InterceptIoDir {
 pub(crate) struct TestSetup {
     fixtures_path: String,
 
-    #[expect(dead_code)]
     intercept_io_dir: InterceptIoDir,
 
     #[expect(dead_code)]
     cwd: TempDir,
 
-    service: RunningService<RoleClient, ()>,
+    service: Option<RunningService<RoleClient, ()>>,
+
+    pid: u32,
 
     normalize_paths: bool,
 }
@@ -112,6 +118,7 @@ impl TestSetup {
             .spawn()
             .expect("spawn language server")
             .0;
+        let pid = child.id().expect("child id");
 
         let service = ().serve(child).await.expect("service start");
 
@@ -119,7 +126,8 @@ impl TestSetup {
             fixtures_path: fixtures_path.display().to_string(),
             intercept_io_dir,
             cwd,
-            service,
+            service: Some(service),
+            pid,
             normalize_paths: true,
         }
     }
@@ -133,7 +141,13 @@ impl TestSetup {
         &self,
         params: CallToolRequestParam,
     ) -> Result<Vec<TextOrJson>, Vec<TextOrJson>> {
-        let resp = self.service.call_tool(params).await.expect("call tool");
+        let resp = self
+            .service
+            .as_ref()
+            .expect("not shut down")
+            .call_tool(params)
+            .await
+            .expect("call tool");
 
         let data = resp
             .content
@@ -199,6 +213,36 @@ impl TestSetup {
     pub(crate) async fn symbol_info_ok(&self, args: JsonObject) -> Vec<String> {
         self.symbol_info(args).await.expect("no error")
     }
+
+    pub(crate) async fn shutdown(mut self) {
+        use nix::{
+            sys::signal::{Signal, kill},
+            unistd::Pid,
+        };
+
+        // take service service BEFORE potentially panicking
+        let service = self.service.take().expect("not shut down yet");
+
+        // there is no way to cleanly shutdown the server using the Rust MCP SDK yet, see https://github.com/modelcontextprotocol/rust-sdk/issues/347
+        let pid = Pid::from_raw(self.pid.try_into().expect("valid pid"));
+        tokio::task::spawn_blocking(move || {
+            kill(pid, Signal::SIGTERM).expect("can send signal");
+        })
+        .await
+        .expect("spawn blocking");
+
+        service.waiting().await.expect("wait for service to exit");
+    }
+}
+
+impl Drop for TestSetup {
+    fn drop(&mut self) {
+        if self.service.is_some() && !std::thread::panicking() {
+            self.intercept_io_dir.disable_cleanup =
+                Some(self.intercept_io_dir.disable_cleanup.unwrap_or_default());
+            panic!("forgot to call shutdown");
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -219,4 +263,22 @@ impl From<String> for TextOrJson {
 
 pub(crate) fn map<const N: usize>(m: [(&'static str, Value); N]) -> JsonObject {
     m.into_iter().map(|(k, v)| (k.to_owned(), v)).collect()
+}
+
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    #[should_panic(expected = "forgot to call shutdown")]
+    async fn test_forgot_shutdown() {
+        let _ = TestSetup::new().await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "foo")]
+    async fn test_forgot_shutdown_no_double_panic() {
+        let mut setup = TestSetup::new().await;
+        setup.intercept_io_dir.disable_cleanup = Some(false);
+        panic!("foo")
+    }
 }

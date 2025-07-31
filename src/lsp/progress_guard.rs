@@ -7,14 +7,11 @@ use lsp_types::{
     NumberOrString, ProgressParamsValue, WorkDoneProgress, WorkDoneProgressBegin,
     WorkDoneProgressEnd, WorkDoneProgressReport, notification::Progress,
 };
-use tokio::{
-    sync::watch::{Receiver, channel},
-    task::JoinSet,
-};
+use tokio::sync::watch::{Receiver, channel};
 use tokio_stream::wrappers::WatchStream;
 use tracing::{debug, info};
 
-use crate::ProgrammingLanguageQuirks;
+use crate::{ProgrammingLanguageQuirks, TaskManager};
 
 /// Allows to wait for in-progress language server tasks.
 #[derive(Debug, Clone)]
@@ -27,7 +24,7 @@ pub(crate) struct ProgressGuard {
 impl ProgressGuard {
     /// Start guard.
     pub(crate) fn start(
-        tasks: &mut JoinSet<Result<()>>,
+        tasks: &mut TaskManager,
         quirks: &Arc<dyn ProgrammingLanguageQuirks>,
         client: Arc<LspClient>,
     ) -> Self {
@@ -42,7 +39,7 @@ impl ProgressGuard {
         let mut init_parts = quirks.init_progress_parts();
 
         let client_captured = Arc::clone(&client);
-        tasks.spawn(async move {
+        tasks.spawn(async move |cancel| {
             let client = client_captured;
             let mut subscription = client
                 .subscribe_to_method::<Progress>()
@@ -51,7 +48,11 @@ impl ProgressGuard {
 
             let mut running = HashSet::new();
 
-            while let Some(res) = subscription.next().await {
+            while let Some(res) = tokio::select! {
+                biased;
+                next = subscription.next() => next,
+                _ = cancel.cancelled() => None,
+            } {
                 let progress = res.context("receive progress")?;
                 let ProgressParamsValue::WorkDone(work_done_progress) = progress.value;
 
@@ -107,8 +108,10 @@ impl ProgressGuard {
                 });
             }
 
+            subscription.unsubscribe().await.context("unsubscribe progress")?;
+
             Result::Ok(())
-        });
+        }, "progress guard");
 
         Self {
             rx_rdy,

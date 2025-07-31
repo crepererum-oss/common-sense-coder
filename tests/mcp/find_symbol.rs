@@ -38,6 +38,8 @@ async fn test_workspace_query() {
         ])).await,
         @"[]",
     );
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -81,6 +83,8 @@ async fn test_global_query() {
         ])).await,
         @"[]",
     );
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -114,6 +118,8 @@ async fn test_fallback_to_global_query() {
         ])).await,
         @"[]",
     );
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -157,6 +163,8 @@ async fn test_workspace_fuzzy_query() {
     ]
     "#,
     );
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -219,6 +227,8 @@ async fn test_global_fuzzy_query() {
     ]
     "#,
     );
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -321,6 +331,8 @@ async fn test_file() {
     ]
     "#,
     );
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -363,6 +375,8 @@ async fn test_file_query() {
         ])).await,
         @"[]",
     );
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -389,4 +403,6 @@ async fn test_file_fuzzy_query() {
     ]
     "#,
     );
+
+    setup.shutdown().await;
 }

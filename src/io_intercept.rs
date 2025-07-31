@@ -10,8 +10,9 @@ use anyhow::Context as _;
 use tokio::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf},
     sync::mpsc::UnboundedSender,
-    task::JoinSet,
 };
+
+use crate::TaskManager;
 
 /// Dyn-typed [`AsyncWrite`].
 pub(crate) type BoxWrite = Pin<Box<dyn AsyncWrite + Send>>;
@@ -35,7 +36,7 @@ impl WriteFork {
         inner: BoxWrite,
         directory: &Path,
         what: &'static str,
-        tasks: &mut JoinSet<anyhow::Result<()>>,
+        tasks: &mut TaskManager,
     ) -> anyhow::Result<Self> {
         let tx = spawn_writer(directory, what, tasks).await?;
         Ok(Self { inner, tx })
@@ -83,7 +84,7 @@ impl ReadFork {
         inner: BoxRead,
         directory: &Path,
         what: &'static str,
-        tasks: &mut JoinSet<anyhow::Result<()>>,
+        tasks: &mut TaskManager,
     ) -> anyhow::Result<Self> {
         let tx = spawn_writer(directory, what, tasks).await?;
         Ok(Self { inner, tx })
@@ -132,7 +133,7 @@ enum Message {
 async fn spawn_writer(
     directory: &Path,
     what: &'static str,
-    tasks: &mut JoinSet<anyhow::Result<()>>,
+    tasks: &mut TaskManager,
 ) -> anyhow::Result<UnboundedSender<Message>> {
     let file = tokio::fs::File::options()
         .append(true)
@@ -142,28 +143,35 @@ async fn spawn_writer(
         .with_context(|| format!("open {what} interception file"))?;
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
-    tasks.spawn(async move {
-        let mut file = file;
-        let mut rx = rx;
+    tasks.spawn(
+        async move |cancel| {
+            let mut file = file;
+            let mut rx = rx;
 
-        while let Some(msg) = rx.recv().await {
-            match msg {
-                Message::Data(data) => {
-                    file.write_all(&data).await.context("write data")?;
-                }
-                Message::Flush => {
-                    file.flush().await.context("flush file")?;
-                }
-                Message::Shutdown => {
-                    break;
+            while let Some(msg) = tokio::select! {
+                biased;
+                next = rx.recv() => next,
+                _ = cancel.cancelled() => None,
+            } {
+                match msg {
+                    Message::Data(data) => {
+                        file.write_all(&data).await.context("write data")?;
+                    }
+                    Message::Flush => {
+                        file.flush().await.context("flush file")?;
+                    }
+                    Message::Shutdown => {
+                        break;
+                    }
                 }
             }
-        }
 
-        file.flush().await.context("flush file")?;
-        file.shutdown().await.context("shut down file")?;
-        Ok(())
-    });
+            file.flush().await.context("flush file")?;
+            file.shutdown().await.context("shut down file")?;
+            Ok(())
+        },
+        what,
+    );
 
     Ok(tx)
 }

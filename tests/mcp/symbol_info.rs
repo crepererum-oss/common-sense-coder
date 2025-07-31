@@ -371,6 +371,8 @@ async fn test_info_for_all_in_file() {
     References:
     - {"file":"src/lib.rs","line":16,"character":41}
     "#);
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -499,6 +501,8 @@ async fn test_multi_match() {
     References:
     - {"file":"src/lib.rs","line":17,"character":5}
     "#);
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -577,6 +581,8 @@ async fn test_foreign_symbol() {
     References:
     - {"file":"src/lib.rs","line":2,"character":21}
     "#);
+
+    setup.shutdown().await;
 }
 
 #[tokio::test]
@@ -592,4 +598,6 @@ async fn test_file_not_found() {
         .unwrap_err();
     let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
     insta::assert_snapshot!(results, @"file not found: does_not_exist.rs");
+
+    setup.shutdown().await;
 }
