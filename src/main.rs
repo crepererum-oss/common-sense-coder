@@ -1,11 +1,13 @@
 use std::{
     path::{Path, PathBuf},
+    process::{ExitCode, Termination},
     sync::Arc,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use clap::Parser;
 use constants::{REVISION, VERSION, VERSION_STRING};
+use futures::FutureExt;
 use io_intercept::{BoxRead, BoxWrite, ReadFork, WriteFork};
 use lang::{ProgrammingLanguage, ProgrammingLanguageQuirks};
 use logging::{LoggingCLIConfig, setup_logging};
@@ -16,14 +18,16 @@ use lsp::{
 use lsp_client::LspClient;
 use mcp::CodeExplorer;
 use rmcp::{ServiceExt, transport::stdio};
-use tokio::task::{JoinError, JoinSet};
-use tracing::{info, warn};
+use tasks::TaskManager;
+use tracing::{debug, info, warn};
 
 // used in integration tests
 #[cfg(test)]
 use assert_cmd as _;
 #[cfg(test)]
 use insta as _;
+#[cfg(test)]
+use nix as _;
 #[cfg(test)]
 use predicates as _;
 #[cfg(test)]
@@ -35,6 +39,7 @@ mod lang;
 mod logging;
 mod lsp;
 mod mcp;
+mod tasks;
 
 /// Provides a "common sense" interface for a language model via Model Context Provider (MCP).
 ///
@@ -61,8 +66,26 @@ struct Args {
     logging_cfg: LoggingCLIConfig,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            // tokio and stdin may cause the process to hang
+            // - https://github.com/tokio-rs/tokio/issues/2466
+            // - https://github.com/chatmail/core/pull/4325/files
+            let r = main_async().await;
+            let exit_code = r.report();
+
+            // manual implementation of `ExitCode::exit_process` because it's unstable,
+            // see https://github.com/rust-lang/rust/issues/97100
+            let exit_code = if exit_code == ExitCode::SUCCESS { 0 } else { 1 };
+            std::process::exit(exit_code);
+        })
+}
+
+async fn main_async() -> Result<()> {
     let dotenv_path = match dotenvy::dotenv() {
         Ok(path) => Some(path),
         Err(e) if e.not_found() => None,
@@ -81,7 +104,7 @@ async fn main() -> Result<()> {
         "start common sense coder"
     );
 
-    let mut tasks = JoinSet::new();
+    let mut tasks = TaskManager::new();
 
     let workspace = Arc::<Path>::from(
         args.workspace
@@ -124,11 +147,11 @@ async fn main() -> Result<()> {
     };
 
     let mut res = tokio::select! {
-        res = main_inner(quirks, client, progress_guard, workspace, stdin, stdout) => {
+        res = main_inner(quirks, Arc::clone(&client), progress_guard, workspace, stdin, stdout) => {
             res.context("main")
         }
-        res = tasks.join_next(), if !tasks.is_empty() => {
-            flatten_task_result(res.expect("checked that there are tasks"))
+        e = tasks.run() => {
+            Err(e).context("tasks")
         }
     };
 
@@ -137,18 +160,34 @@ async fn main() -> Result<()> {
     }
 
     info!("shutdown server");
-    tasks.abort_all();
-    while let Some(res2) = tasks.join_next().await {
-        let res2 = match res2 {
-            Ok(inner) => Ok(inner),
-            Err(e) if e.is_cancelled() => Ok(Ok(())),
-            Err(e) => Err(e),
-        };
-        let res2 = flatten_task_result(res2);
-        res = res.and(res2);
-    }
 
-    res = res.and(child.kill().await.context("terminate language server"));
+    debug!("dismantle LSP");
+    res = res.and(
+        async {
+            client
+                .shutdown()
+                .await
+                .context("shutdown language server")?;
+            client.exit().await.context("exit language server")?;
+            Ok(())
+        }
+        .await,
+    );
+    res = res.and(
+        async {
+            let status = child.wait().await.context("terminate language server")?;
+
+            // `status.exit_ok` is unstable,
+            // see https://github.com/rust-lang/rust/issues/84908
+            ensure!(status.success(), "LSP exit was not clean: {status}");
+
+            Ok(())
+        }
+        .await,
+    );
+    debug!("LSP gone");
+
+    res = res.and(tasks.shutdown().await.context("task shutdown"));
 
     info!("shutdown complete");
     res
@@ -170,15 +209,24 @@ async fn main_inner(
         .serve((stdin, stdout))
         .await
         .context("set up code explorer service")?;
-    service.waiting().await?;
+    let ct = service.cancellation_token();
+    let service_fut = service.waiting().fuse();
+    let mut service_fut = std::pin::pin!(service_fut);
+
+    let mut signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .context("create signal handler")?;
+
+    tokio::select! {
+        _ = signal.recv() => {
+            info!("received shutdown signal");
+            ct.cancel();
+        }
+        res = &mut service_fut => {
+            res.context("wait for service")?;
+        }
+    }
+
+    service_fut.await.context("wait for service")?;
 
     Ok(())
-}
-
-fn flatten_task_result(res: Result<Result<()>, JoinError>) -> Result<()> {
-    match res {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(e)) => Err(e).context("task"),
-        Err(e) => Err(e).context("join"),
-    }
 }
