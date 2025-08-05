@@ -68,14 +68,14 @@ async fn test_info_for_all_in_file() {
     Inputs:
       file: src/lib.rs
       name: sub
-      line: 4
+      line: 5
       char: 1
 
     ---
 
     Token:
 
-    - location: {"file":"src/lib.rs","line":4,"character":5}
+    - location: {"file":"src/lib.rs","line":5,"character":5}
     - type: namespace
     - modifiers: declaration
 
@@ -92,7 +92,7 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declarations:
-    - {"file":"src/lib.rs","line":4,"character":5}
+    - {"file":"src/lib.rs","line":5,"character":5}
 
     ---
 
@@ -119,14 +119,14 @@ async fn test_info_for_all_in_file() {
     Inputs:
       file: src/lib.rs
       name: my_lib_fn
-      line: 6
+      line: 7
       char: 1
 
     ---
 
     Token:
 
-    - location: {"file":"src/lib.rs","line":13,"character":8}
+    - location: {"file":"src/lib.rs","line":14,"character":8}
     - type: function
     - modifiers: declaration, public
 
@@ -153,12 +153,12 @@ async fn test_info_for_all_in_file() {
     ---
 
     Declarations:
-    - {"file":"src/lib.rs","line":13,"character":8}
+    - {"file":"src/lib.rs","line":14,"character":8}
 
     ---
 
     Definitions:
-    - {"file":"src/lib.rs","line":13,"character":8}
+    - {"file":"src/lib.rs","line":14,"character":8}
 
     ---
 
@@ -174,53 +174,6 @@ async fn test_info_for_all_in_file() {
 
     References:
     None
-
-    ==========
-
-    Inputs:
-      file: src/lib.rs
-      name: accu
-      line: 14
-      char: 5
-
-    ---
-
-    Token:
-
-    - location: {"file":"src/lib.rs","line":14,"character":9}
-    - type: variable
-    - modifiers: declaration
-
-    ---
-
-    ```rust
-    let accu: u64
-    ```
-
-    ---
-
-    Declarations:
-    - {"file":"src/lib.rs","line":14,"character":9}
-
-    ---
-
-    Definitions:
-    - {"file":"src/lib.rs","line":14,"character":9}
-
-    ---
-
-    Implementations:
-    None
-
-    ---
-
-    Type Definitions:
-    None
-
-    ---
-
-    References:
-    - {"file":"src/lib.rs","line":15,"character":16}
 
     ==========
 
@@ -314,47 +267,39 @@ async fn test_info_for_all_in_file() {
     ---
 
     References:
-    - {"file":"src/lib.rs","line":17,"character":5}
+    - {"file":"src/lib.rs","line":17,"character":16}
 
     ==========
 
     Inputs:
       file: src/lib.rs
-      name: private_fn
-      line: 20
-      char: 1
+      name: accu
+      line: 17
+      char: 5
 
     ---
 
     Token:
 
-    - location: {"file":"src/lib.rs","line":21,"character":4}
-    - type: function
+    - location: {"file":"src/lib.rs","line":17,"character":9}
+    - type: variable
     - modifiers: declaration
 
     ---
 
     ```rust
-    main_lib
+    let accu: u64
     ```
-
-    ```rust
-    fn private_fn() -> u64
-    ```
-
-    ---
-
-    A private function that returns a constant value.
 
     ---
 
     Declarations:
-    - {"file":"src/lib.rs","line":21,"character":4}
+    - {"file":"src/lib.rs","line":17,"character":9}
 
     ---
 
     Definitions:
-    - {"file":"src/lib.rs","line":21,"character":4}
+    - {"file":"src/lib.rs","line":17,"character":9}
 
     ---
 
@@ -369,7 +314,325 @@ async fn test_info_for_all_in_file() {
     ---
 
     References:
-    - {"file":"src/lib.rs","line":16,"character":41}
+    - {"file":"src/lib.rs","line":18,"character":16}
+
+    ==========
+
+    Inputs:
+      file: src/lib.rs
+      name: accu
+      line: 18
+      char: 5
+
+    ---
+
+    Token:
+
+    - location: {"file":"src/lib.rs","line":18,"character":9}
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declarations:
+    - {"file":"src/lib.rs","line":18,"character":9}
+
+    ---
+
+    Definitions:
+    - {"file":"src/lib.rs","line":18,"character":9}
+
+    ---
+
+    Implementations:
+    None
+
+    ---
+
+    Type Definitions:
+    None
+
+    ---
+
+    References:
+    - {"file":"src/lib.rs","line":19,"character":5}
+
+    ==========
+
+    Inputs:
+      file: src/lib.rs
+      name: my_private_lib_fn
+      line: 22
+      char: 1
+
+    ---
+
+    Token:
+
+    - location: {"file":"src/lib.rs","line":23,"character":4}
+    - type: function
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    main_lib
+    ```
+
+    ```rust
+    fn my_private_lib_fn() -> u64
+    ```
+
+    ---
+
+    A private function that returns a constant value.
+
+    ---
+
+    Declarations:
+    - {"file":"src/lib.rs","line":23,"character":4}
+
+    ---
+
+    Definitions:
+    - {"file":"src/lib.rs","line":23,"character":4}
+
+    ---
+
+    Implementations:
+    None
+
+    ---
+
+    Type Definitions:
+    None
+
+    ---
+
+    References:
+    - {"file":"src/lib.rs","line":18,"character":41}
+
+    ==========
+
+    Inputs:
+      file: src/lib.rs
+      name: foo
+      line: 27
+      char: 1
+
+    ---
+
+    Token:
+
+    - location: {"file":"src/lib.rs","line":28,"character":4}
+    - type: function
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    main_lib
+    ```
+
+    ```rust
+    fn foo() -> u64
+    ```
+
+    ---
+
+    Another private function that returns a constant value.
+
+    ---
+
+    Declarations:
+    - {"file":"src/lib.rs","line":28,"character":4}
+
+    ---
+
+    Definitions:
+    - {"file":"src/lib.rs","line":28,"character":4}
+
+    ---
+
+    Implementations:
+    None
+
+    ---
+
+    Type Definitions:
+    None
+
+    ---
+
+    References:
+    - {"file":"src/lib.rs","line":18,"character":63}
+
+    ==========
+
+    Inputs:
+      file: src/lib.rs
+      name: main
+      line: 32
+      char: 1
+
+    ---
+
+    Token:
+
+    - location: {"file":"src/lib.rs","line":32,"character":4}
+    - type: function
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    main_lib
+    ```
+
+    ```rust
+    fn main()
+    ```
+
+    ---
+
+    Declarations:
+    - {"file":"src/lib.rs","line":32,"character":4}
+
+    ---
+
+    Definitions:
+    - {"file":"src/lib.rs","line":32,"character":4}
+
+    ---
+
+    Implementations:
+    None
+
+    ---
+
+    Type Definitions:
+    None
+
+    ---
+
+    References:
+    None
+
+    ==========
+
+    Inputs:
+      file: src/lib.rs
+      name: MyMainStruct
+      line: 36
+      char: 1
+
+    ---
+
+    Token:
+
+    - location: {"file":"src/lib.rs","line":39,"character":19}
+    - type: struct
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    main_lib
+    ```
+
+    ```rust
+    struct MyMainStruct {
+        pub field: u64,
+    }
+    ```
+
+    ---
+
+    A struct that "shadows" the `main` function.
+
+    See <https://github.com/rust-lang/rust-analyzer/issues/19486#issuecomment-2817393342>.
+
+    ---
+
+    Declarations:
+    - {"file":"src/lib.rs","line":39,"character":19}
+
+    ---
+
+    Definitions:
+    - {"file":"src/lib.rs","line":39,"character":19}
+
+    ---
+
+    Implementations:
+    None
+
+    ---
+
+    Type Definitions:
+    None
+
+    ---
+
+    References:
+    None
+
+    ==========
+
+    Inputs:
+      file: src/lib.rs
+      name: field
+      line: 40
+      char: 5
+
+    ---
+
+    Token:
+
+    - location: {"file":"src/lib.rs","line":40,"character":9}
+    - type: property
+    - modifiers: declaration, public
+
+    ---
+
+    ```rust
+    main_lib::MyMainStruct
+    ```
+
+    ```rust
+    pub field: u64
+    ```
+
+    ---
+
+    Declarations:
+    - {"file":"src/lib.rs","line":40,"character":9}
+
+    ---
+
+    Definitions:
+    - {"file":"src/lib.rs","line":40,"character":9}
+
+    ---
+
+    Implementations:
+    None
+
+    ---
+
+    Type Definitions:
+    None
+
+    ---
+
+    References:
+    None
     "#);
 
     setup.shutdown().await;
@@ -386,45 +649,6 @@ async fn test_multi_match() {
         .await;
     let results = results.join(&format!("\n\n{RESULT_SEP}\n\n"));
     insta::assert_snapshot!(results, @r#"
-    Token:
-
-    - location: {"file":"src/lib.rs","line":14,"character":9}
-    - type: variable
-    - modifiers: declaration
-
-    ---
-
-    ```rust
-    let accu: u64
-    ```
-
-    ---
-
-    Declarations:
-    - {"file":"src/lib.rs","line":14,"character":9}
-
-    ---
-
-    Definitions:
-    - {"file":"src/lib.rs","line":14,"character":9}
-
-    ---
-
-    Implementations:
-    None
-
-    ---
-
-    Type Definitions:
-    None
-
-    ---
-
-    References:
-    - {"file":"src/lib.rs","line":15,"character":16}
-
-    ==========
-
     Token:
 
     - location: {"file":"src/lib.rs","line":15,"character":9}
@@ -499,7 +723,85 @@ async fn test_multi_match() {
     ---
 
     References:
-    - {"file":"src/lib.rs","line":17,"character":5}
+    - {"file":"src/lib.rs","line":17,"character":16}
+
+    ==========
+
+    Token:
+
+    - location: {"file":"src/lib.rs","line":17,"character":9}
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declarations:
+    - {"file":"src/lib.rs","line":17,"character":9}
+
+    ---
+
+    Definitions:
+    - {"file":"src/lib.rs","line":17,"character":9}
+
+    ---
+
+    Implementations:
+    None
+
+    ---
+
+    Type Definitions:
+    None
+
+    ---
+
+    References:
+    - {"file":"src/lib.rs","line":18,"character":16}
+
+    ==========
+
+    Token:
+
+    - location: {"file":"src/lib.rs","line":18,"character":9}
+    - type: variable
+    - modifiers: declaration
+
+    ---
+
+    ```rust
+    let accu: u64
+    ```
+
+    ---
+
+    Declarations:
+    - {"file":"src/lib.rs","line":18,"character":9}
+
+    ---
+
+    Definitions:
+    - {"file":"src/lib.rs","line":18,"character":9}
+
+    ---
+
+    Implementations:
+    None
+
+    ---
+
+    Type Definitions:
+    None
+
+    ---
+
+    References:
+    - {"file":"src/lib.rs","line":19,"character":5}
     "#);
 
     setup.shutdown().await;
