@@ -11,4 +11,13 @@ name = "main_lib"
 version = "0.1.0"
 dependencies = [
  "dependency_lib",
+ "workspace_member",
 ]
+
+[[package]]
+name = "unused_workspace_member"
+version = "0.1.0"
+
+[[package]]
+name = "workspace_member"
+version = "0.1.0"

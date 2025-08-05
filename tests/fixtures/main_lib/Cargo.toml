@@ -5,3 +5,10 @@ edition = "2024"
 
 [dependencies]
 dependency_lib = { path = "../dependency_lib" }
+workspace_member = { path = "./workspace_member" }
+
+[workspace]
+members = [
+    "unused_workspace_member",
+    "workspace_member",
+]

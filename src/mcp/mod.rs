@@ -39,7 +39,7 @@ use crate::{
         progress_guard::Guard,
         requests::{
             WorkspaceSymbolParamsExt, WorkspaceSymbolRequestExt, WorkspaceSymbolScopeKindFiltering,
-            WorkspaceSymbolSearchScope,
+            WorkspaceSymbolSearchKind, WorkspaceSymbolSearchScope,
         },
         tokens::{Token, TokenLegend},
     },
@@ -185,7 +185,18 @@ impl CodeExplorer {
                             } else {
                                 WorkspaceSymbolSearchScope::Workspace
                             }),
-                            ..Default::default()
+                            search_kind: Some(if workspace_and_dependencies {
+                                // `WorkspaceSymbolSearchScope::WorkspaceAndDependencies` + `WorkspaceSymbolSearchKind::AllSymbols`
+                                // SHOULD work with `AllSymbols` but seems to produce empty results. Maybe it's a bug
+                                // in rust-analyzer or just not implemented. There are a some issues related to symbol
+                                // filtering:
+                                //
+                                // - https://github.com/rust-lang/rust-analyzer/issues/13938
+                                // - https://github.com/rust-lang/rust-analyzer/issues/16491
+                                WorkspaceSymbolSearchKind::OnlyTypes
+                            } else {
+                                WorkspaceSymbolSearchKind::AllSymbols
+                            }),
                         },
                     })
                     .await

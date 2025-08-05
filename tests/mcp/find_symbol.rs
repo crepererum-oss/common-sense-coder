@@ -23,9 +23,92 @@ async fn test_workspace_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 13,
+        "file": "unused_workspace_member/src/lib.rs",
+        "line": 1,
         "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "workspace_member/src/lib.rs",
+        "line": 1,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 14,
+        "character": 8
+      }
+    ]
+    "#,
+    );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("my_private_lib_fn")),
+        ])).await,
+        @r#"
+    [
+      {
+        "type": "json",
+        "name": "my_private_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 23,
+        "character": 4
+      }
+    ]
+    "#,
+    );
+
+    insta::assert_json_snapshot!(
+        setup.find_symbol_ok(map([
+            ("query", json!("main")),
+        ])).await,
+        @r#"
+    [
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "unused_workspace_member/build.rs",
+        "line": 1,
+        "character": 4
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "build.rs",
+        "line": 1,
+        "character": 4
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "workspace_member/build.rs",
+        "line": 1,
+        "character": 4
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 32,
+        "character": 4
       }
     ]
     "#,
@@ -45,6 +128,7 @@ async fn test_workspace_query() {
 #[tokio::test]
 async fn test_global_query() {
     let setup = TestSetup::new().await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
     insta::assert_json_snapshot!(
         setup.find_symbol_ok(map([
@@ -53,6 +137,15 @@ async fn test_global_query() {
         ])).await,
         @r#"
     [
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "unused_workspace_member/src/lib.rs",
+        "line": 1,
+        "character": 8
+      },
       {
         "type": "json",
         "name": "my_lib_fn",
@@ -67,8 +160,17 @@ async fn test_global_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
+        "file": "workspace_member/src/lib.rs",
+        "line": 1,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
         "file": "src/lib.rs",
-        "line": 13,
+        "line": 14,
         "character": 8
       }
     ]
@@ -138,9 +240,36 @@ async fn test_workspace_fuzzy_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 13,
+        "file": "unused_workspace_member/src/lib.rs",
+        "line": 1,
         "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "workspace_member/src/lib.rs",
+        "line": 1,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 14,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_private_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 23,
+        "character": 4
       },
       {
         "type": "json",
@@ -184,6 +313,15 @@ async fn test_global_fuzzy_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
+        "file": "unused_workspace_member/src/lib.rs",
+        "line": 1,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
         "file": "/fixtures/dependency_lib/src/lib.rs",
         "line": 1,
         "character": 8
@@ -193,9 +331,27 @@ async fn test_global_fuzzy_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 13,
+        "file": "workspace_member/src/lib.rs",
+        "line": 1,
         "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 14,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_private_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 23,
+        "character": 4
       },
       {
         "type": "json",
@@ -247,7 +403,7 @@ async fn test_file() {
         "kind": "Module",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 4,
+        "line": 5,
         "character": 1
       },
       {
@@ -256,17 +412,8 @@ async fn test_file() {
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 6,
+        "line": 7,
         "character": 1
-      },
-      {
-        "type": "json",
-        "name": "accu",
-        "kind": "Variable",
-        "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 14,
-        "character": 5
       },
       {
         "type": "json",
@@ -288,12 +435,66 @@ async fn test_file() {
       },
       {
         "type": "json",
-        "name": "private_fn",
+        "name": "accu",
+        "kind": "Variable",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 17,
+        "character": 5
+      },
+      {
+        "type": "json",
+        "name": "accu",
+        "kind": "Variable",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 18,
+        "character": 5
+      },
+      {
+        "type": "json",
+        "name": "my_private_lib_fn",
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 20,
+        "line": 22,
         "character": 1
+      },
+      {
+        "type": "json",
+        "name": "foo",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 27,
+        "character": 1
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 32,
+        "character": 1
+      },
+      {
+        "type": "json",
+        "name": "MyMainStruct",
+        "kind": "Struct",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 36,
+        "character": 1
+      },
+      {
+        "type": "json",
+        "name": "field",
+        "kind": "Field",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 40,
+        "character": 5
       }
     ]
     "#
@@ -360,7 +561,7 @@ async fn test_file_query() {
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 6,
+        "line": 7,
         "character": 1
       }
     ]
@@ -397,7 +598,16 @@ async fn test_file_fuzzy_query() {
         "kind": "Function",
         "deprecated": false,
         "file": "src/lib.rs",
-        "line": 6,
+        "line": 7,
+        "character": 1
+      },
+      {
+        "type": "json",
+        "name": "my_private_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 22,
         "character": 1
       }
     ]
