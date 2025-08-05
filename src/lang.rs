@@ -74,7 +74,7 @@ impl ProgrammingLanguageQuirks for Rust {
             "workspace": {
                 "symbol": {
                     "search": {
-                        "scope": "workspace_and_dependencies",
+                        "limit": 10_000,
                     },
                 },
             },

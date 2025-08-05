@@ -12,7 +12,7 @@ use lsp_types::{
     request::{
         DocumentSymbolRequest, GotoDeclaration, GotoDeclarationParams, GotoDefinition,
         GotoImplementation, GotoImplementationParams, GotoTypeDefinition, GotoTypeDefinitionParams,
-        HoverRequest, References, SemanticTokensFullRequest, WorkspaceSymbolRequest,
+        HoverRequest, References, SemanticTokensFullRequest,
     },
 };
 use rmcp::{
@@ -37,6 +37,10 @@ use crate::{
     lsp::{
         location::{LocationVariants, McpLocation, path_to_text_document_identifier, path_to_uri},
         progress_guard::Guard,
+        requests::{
+            WorkspaceSymbolParamsExt, WorkspaceSymbolRequestExt, WorkspaceSymbolScopeKindFiltering,
+            WorkspaceSymbolSearchScope,
+        },
         tokens::{Token, TokenLegend},
     },
 };
@@ -170,9 +174,19 @@ impl CodeExplorer {
             None => {
                 let query = query.as_ref().required("query".to_string())?;
                 let resp = client
-                    .send_request::<WorkspaceSymbolRequest>(WorkspaceSymbolParams {
-                        query: query.clone(),
-                        ..Default::default()
+                    .send_request::<WorkspaceSymbolRequestExt>(WorkspaceSymbolParamsExt {
+                        base: WorkspaceSymbolParams {
+                            query: query.clone(),
+                            ..Default::default()
+                        },
+                        filtering: WorkspaceSymbolScopeKindFiltering {
+                            search_scope: Some(if workspace_and_dependencies {
+                                WorkspaceSymbolSearchScope::WorkspaceAndDependencies
+                            } else {
+                                WorkspaceSymbolSearchScope::Workspace
+                            }),
+                            ..Default::default()
+                        },
                     })
                     .await
                     .context("WorkspaceSymbolRequest")
