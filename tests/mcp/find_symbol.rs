@@ -72,7 +72,46 @@ async fn test_workspace_query() {
         setup.find_symbol_ok(map([
             ("query", json!("main")),
         ])).await,
-        @"[]",
+        @r#"
+    [
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "unused_workspace_member/build.rs",
+        "line": 1,
+        "character": 4
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "build.rs",
+        "line": 1,
+        "character": 4
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "workspace_member/build.rs",
+        "line": 1,
+        "character": 4
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 32,
+        "character": 4
+      }
+    ]
+    "#,
     );
 
     // should NOT find library function
