@@ -40,7 +40,7 @@ pub(crate) async fn spawn_lsp(
                 .await,
         )
     } else {
-        Stdio::inherit()
+        Stdio::null()
     };
 
     let mut child = Command::new(quirks.language_server_binary())
