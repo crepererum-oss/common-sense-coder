@@ -151,6 +151,7 @@ impl TestSetup {
 
         let data = resp
             .content
+            .expect("content should always be present")
             .into_iter()
             .map(|annotated| match annotated.raw {
                 RawContent::Text(raw_text_content) => {
