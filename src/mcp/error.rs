@@ -139,10 +139,10 @@ mod test {
     impl std::fmt::Display for TextError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{}", self.msg)?;
-            if self.display_source {
-                if let Some(source) = self.source.as_ref() {
-                    write!(f, ": {source}")?;
-                }
+            if self.display_source
+                && let Some(source) = self.source.as_ref()
+            {
+                write!(f, ": {source}")?;
             }
             Ok(())
         }
