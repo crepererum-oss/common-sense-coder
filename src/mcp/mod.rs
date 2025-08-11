@@ -254,7 +254,7 @@ impl CodeExplorer {
         mode: SearchMode,
         workspace_and_dependencies: bool,
     ) -> Result<Vec<SymbolResult>, McpError> {
-        symbol_informations
+        let mut results = symbol_informations
             .iter()
             // rust-analyzer search is fuzzy by default
             .filter(|si| {
@@ -307,7 +307,11 @@ impl CodeExplorer {
                 }))
             })
             .filter_map(Result::transpose)
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        results.sort_unstable();
+
+        Ok(results)
     }
 
     #[tool(
@@ -563,7 +567,7 @@ struct FindSymbolRequest {
     workspace_and_dependencies: Option<bool>,
 }
 
-#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, schemars::JsonSchema)]
 struct SymbolResult {
     name: String,
     kind: String,
@@ -571,6 +575,23 @@ struct SymbolResult {
     file: String,
     line: u32,
     character: u32,
+}
+
+impl PartialOrd for SymbolResult {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SymbolResult {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.file
+            .cmp(&other.file)
+            .then_with(|| self.line.cmp(&other.line))
+            .then_with(|| self.character.cmp(&other.character))
+            .then_with(|| self.name.cmp(&other.name))
+            .then_with(|| self.kind.cmp(&other.kind))
+    }
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]

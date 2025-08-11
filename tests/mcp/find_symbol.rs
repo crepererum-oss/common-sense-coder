@@ -23,6 +23,15 @@ async fn test_workspace_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
+        "file": "src/lib.rs",
+        "line": 14,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
         "file": "unused_workspace_member/src/lib.rs",
         "line": 1,
         "character": 8
@@ -34,15 +43,6 @@ async fn test_workspace_query() {
         "deprecated": false,
         "file": "workspace_member/src/lib.rs",
         "line": 1,
-        "character": 8
-      },
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "src/lib.rs",
-        "line": 14,
         "character": 8
       }
     ]
@@ -79,25 +79,7 @@ async fn test_workspace_query() {
         "name": "main",
         "kind": "Function",
         "deprecated": false,
-        "file": "unused_workspace_member/build.rs",
-        "line": 1,
-        "character": 4
-      },
-      {
-        "type": "json",
-        "name": "main",
-        "kind": "Function",
-        "deprecated": false,
         "file": "build.rs",
-        "line": 1,
-        "character": 4
-      },
-      {
-        "type": "json",
-        "name": "main",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "workspace_member/build.rs",
         "line": 1,
         "character": 4
       },
@@ -108,6 +90,24 @@ async fn test_workspace_query() {
         "deprecated": false,
         "file": "src/lib.rs",
         "line": 32,
+        "character": 4
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "unused_workspace_member/build.rs",
+        "line": 1,
+        "character": 4
+      },
+      {
+        "type": "json",
+        "name": "main",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "workspace_member/build.rs",
+        "line": 1,
         "character": 4
       }
     ]
@@ -142,25 +142,7 @@ async fn test_global_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "unused_workspace_member/src/lib.rs",
-        "line": 1,
-        "character": 8
-      },
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
         "file": "/fixtures/dependency_lib/src/lib.rs",
-        "line": 1,
-        "character": 8
-      },
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "workspace_member/src/lib.rs",
         "line": 1,
         "character": 8
       },
@@ -171,6 +153,24 @@ async fn test_global_query() {
         "deprecated": false,
         "file": "src/lib.rs",
         "line": 14,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "unused_workspace_member/src/lib.rs",
+        "line": 1,
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "workspace_member/src/lib.rs",
+        "line": 1,
         "character": 8
       }
     ]
@@ -240,24 +240,6 @@ async fn test_workspace_fuzzy_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "unused_workspace_member/src/lib.rs",
-        "line": 1,
-        "character": 8
-      },
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
-        "file": "workspace_member/src/lib.rs",
-        "line": 1,
-        "character": 8
-      },
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
         "file": "src/lib.rs",
         "line": 14,
         "character": 8
@@ -282,12 +264,21 @@ async fn test_workspace_fuzzy_query() {
       },
       {
         "type": "json",
-        "name": "my_sub_lib_fn",
+        "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "src/lib.rs",
+        "file": "unused_workspace_member/src/lib.rs",
         "line": 1,
-        "character": 17
+        "character": 8
+      },
+      {
+        "type": "json",
+        "name": "my_lib_fn",
+        "kind": "Function",
+        "deprecated": false,
+        "file": "workspace_member/src/lib.rs",
+        "line": 1,
+        "character": 8
       }
     ]
     "#,
@@ -313,26 +304,17 @@ async fn test_global_fuzzy_query() {
         "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "unused_workspace_member/src/lib.rs",
-        "line": 1,
-        "character": 8
-      },
-      {
-        "type": "json",
-        "name": "my_lib_fn",
-        "kind": "Function",
-        "deprecated": false,
         "file": "/fixtures/dependency_lib/src/lib.rs",
         "line": 1,
         "character": 8
       },
       {
         "type": "json",
-        "name": "my_lib_fn",
+        "name": "my_unused_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "workspace_member/src/lib.rs",
-        "line": 1,
+        "file": "/fixtures/dependency_lib/src/lib.rs",
+        "line": 5,
         "character": 8
       },
       {
@@ -364,20 +346,20 @@ async fn test_global_fuzzy_query() {
       },
       {
         "type": "json",
-        "name": "my_sub_lib_fn",
+        "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "src/lib.rs",
+        "file": "unused_workspace_member/src/lib.rs",
         "line": 1,
-        "character": 17
+        "character": 8
       },
       {
         "type": "json",
-        "name": "my_unused_lib_fn",
+        "name": "my_lib_fn",
         "kind": "Function",
         "deprecated": false,
-        "file": "/fixtures/dependency_lib/src/lib.rs",
-        "line": 5,
+        "file": "workspace_member/src/lib.rs",
+        "line": 1,
         "character": 8
       }
     ]
