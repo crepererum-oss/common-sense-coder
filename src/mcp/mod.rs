@@ -75,13 +75,13 @@ impl CodeExplorer {
         let fut_progress = async {
             if let Some(progress_token) = ctx.meta.get_progress_token() {
                 let mut stream_evt = self.progress_guard.events();
-                let mut progress = 0;
+                let mut progress = 0u32;
 
                 while let Some(evt) = stream_evt.next().await {
                     ctx.peer
                         .notify_progress(ProgressNotificationParam {
                             progress_token: progress_token.clone(),
-                            progress,
+                            progress: progress as f64,
                             total: None,
                             message: Some(evt),
                         })
