@@ -35,7 +35,7 @@ jobs:
           toolchain: stable
 
       - name: Cache
-        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0  # v2.8.0
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1  # v2.8.1
 
       - name: cargo fmt
         run: cargo fmt --all -- --check
@@ -61,7 +61,7 @@ jobs:
         run: cargo bench --profile=dev --all-features --workspace -- --test
 
       - name: upload logs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
         if: always()
         with:
           name: IO interception
