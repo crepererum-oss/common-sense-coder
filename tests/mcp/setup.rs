@@ -1,6 +1,6 @@
 use std::{ops::Deref, path::Path, process::Stdio};
 
-use assert_cmd::{cargo::cargo_bin, crate_name};
+use assert_cmd::{cargo::cargo_bin, pkg_name};
 use rmcp::{
     RoleClient,
     model::{CallToolRequestParam, JsonObject, RawContent},
@@ -73,9 +73,7 @@ pub(crate) struct TestSetup {
 
 impl TestSetup {
     pub(crate) async fn new() -> Self {
-        let server_path = cargo_bin(crate_name!())
-            .canonicalize()
-            .expect("canonicalize");
+        let server_path = cargo_bin(pkg_name!()).canonicalize().expect("canonicalize");
 
         let fixtures_path = Path::new(file!())
             .parent()
@@ -151,7 +149,6 @@ impl TestSetup {
 
         let data = resp
             .content
-            .expect("content should always be present")
             .into_iter()
             .map(|annotated| match annotated.raw {
                 RawContent::Text(raw_text_content) => {
@@ -166,6 +163,9 @@ impl TestSetup {
                 }
                 RawContent::Image(_) => unimplemented!("image content not supported"),
                 RawContent::Resource(_) => unimplemented!("resource content not supported"),
+                RawContent::ResourceLink(_) => {
+                    unimplemented!("resource link content not supported")
+                }
                 RawContent::Audio(_) => unimplemented!("audio content not supported"),
             })
             .collect();

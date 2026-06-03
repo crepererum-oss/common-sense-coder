@@ -18,12 +18,12 @@ use tracing as _;
 use tracing_log as _;
 use tracing_subscriber as _;
 
-use assert_cmd::{Command, crate_name};
+use assert_cmd::{Command, pkg_name};
 use tempfile::TempDir;
 
 #[test]
 fn test_help_arg() {
-    Command::cargo_bin(crate_name!())
+    Command::cargo_bin(pkg_name!())
         .unwrap()
         .arg("--help")
         .assert()
@@ -32,7 +32,7 @@ fn test_help_arg() {
 
 #[test]
 fn test_version_arg() {
-    Command::cargo_bin(crate_name!())
+    Command::cargo_bin(pkg_name!())
         .unwrap()
         .arg("--version")
         .assert()
@@ -42,7 +42,7 @@ fn test_version_arg() {
 #[test]
 fn test_dotenv_not_found() {
     let cwd = TempDir::new().unwrap();
-    Command::cargo_bin(crate_name!())
+    Command::cargo_bin(pkg_name!())
         .unwrap()
         .current_dir(cwd.path())
         .arg("--help")
@@ -54,7 +54,7 @@ fn test_dotenv_not_found() {
 fn test_dotenv_invalid() {
     let cwd = TempDir::new().unwrap();
     std::fs::write(cwd.path().join(".env"), "X").unwrap();
-    Command::cargo_bin(crate_name!())
+    Command::cargo_bin(pkg_name!())
         .unwrap()
         .current_dir(cwd.path())
         .arg("--help")

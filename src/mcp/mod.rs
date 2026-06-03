@@ -17,7 +17,10 @@ use lsp_types::{
 };
 use rmcp::{
     RoleServer, ServerHandler,
-    handler::server::tool::{Parameters, ToolCallContext, ToolRouter},
+    handler::server::{
+        tool::{ToolCallContext, ToolRouter},
+        wrapper::Parameters,
+    },
     model::{
         CallToolRequestParam, CallToolResult, Content, ErrorData as McpError, Implementation,
         ListToolsResult, PaginatedRequestParam, ProgressNotificationParam, ServerCapabilities,
@@ -482,7 +485,7 @@ impl CodeExplorer {
 
                 let Some(resp) = resp else {
                     // no symbols
-                    return Ok(CallToolResult::success(vec![]));
+                    return Ok(success_tool_result(vec![]));
                 };
 
                 match resp {
@@ -521,7 +524,7 @@ impl CodeExplorer {
             .into_iter()
             .map(Content::json)
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(CallToolResult::success(results))
+        Ok(success_tool_result(results))
     }
 
     #[tool(
@@ -587,7 +590,7 @@ impl CodeExplorer {
             results.push(Content::text(res));
         }
 
-        Ok(CallToolResult::success(results))
+        Ok(success_tool_result(results))
     }
 }
 
@@ -673,6 +676,19 @@ fn empty_string_to_none(s: Option<String>) -> Option<String> {
     s.and_then(|s| (!s.is_empty()).then_some(s))
 }
 
+fn success_tool_result(content: Vec<Content>) -> CallToolResult {
+    if content.is_empty() {
+        CallToolResult {
+            content,
+            structured_content: Some(serde_json::Value::Array(vec![])),
+            is_error: Some(false),
+            meta: None,
+        }
+    } else {
+        CallToolResult::success(content)
+    }
+}
+
 impl ServerHandler for CodeExplorer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
@@ -680,7 +696,10 @@ impl ServerHandler for CodeExplorer {
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation {
                 name: NAME.to_owned(),
+                title: None,
                 version: VERSION_STRING.to_owned(),
+                icons: None,
+                website_url: None,
             },
             instructions: Some("\
                 This server helps you to understand a code base.\
