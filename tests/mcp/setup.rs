@@ -3,7 +3,7 @@ use std::{ops::Deref, path::Path, process::Stdio};
 use assert_cmd::{cargo::cargo_bin, pkg_name};
 use rmcp::{
     RoleClient,
-    model::{CallToolRequestParam, JsonObject, RawContent},
+    model::{CallToolRequestParams, JsonObject, RawContent},
     service::{RunningService, ServiceExt},
     transport::TokioChildProcess,
 };
@@ -132,7 +132,7 @@ impl TestSetup {
 
     async fn call_tool(
         &self,
-        params: CallToolRequestParam,
+        params: CallToolRequestParams,
     ) -> Result<Vec<TextOrJson>, Vec<TextOrJson>> {
         let resp = self
             .service
@@ -176,11 +176,8 @@ impl TestSetup {
         &self,
         args: JsonObject,
     ) -> Result<Vec<TextOrJson>, Vec<TextOrJson>> {
-        self.call_tool(CallToolRequestParam {
-            name: "find_symbol".into(),
-            arguments: Some(args),
-        })
-        .await
+        self.call_tool(CallToolRequestParams::new("find_symbol").with_arguments(args))
+            .await
     }
 
     pub(crate) async fn find_symbol_ok(&self, args: JsonObject) -> Vec<TextOrJson> {
@@ -197,13 +194,10 @@ impl TestSetup {
                 .collect()
         };
 
-        self.call_tool(CallToolRequestParam {
-            name: "symbol_info".into(),
-            arguments: Some(args),
-        })
-        .await
-        .map(map_data)
-        .map_err(map_data)
+        self.call_tool(CallToolRequestParams::new("symbol_info").with_arguments(args))
+            .await
+            .map(map_data)
+            .map_err(map_data)
     }
 
     pub(crate) async fn symbol_info_ok(&self, args: JsonObject) -> Vec<String> {
