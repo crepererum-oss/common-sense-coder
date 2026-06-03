@@ -63,6 +63,7 @@ async fn test_info_for_all_in_file() {
     }
 
     insta::assert_snapshot!(snapshot, @r#"
+
     ==========
 
     Inputs:
