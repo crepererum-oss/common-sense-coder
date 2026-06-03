@@ -66,8 +66,6 @@ pub(crate) struct TestSetup {
 
     service: Option<RunningService<RoleClient, ()>>,
 
-    pid: u32,
-
     normalize_paths: bool,
 }
 
@@ -116,8 +114,6 @@ impl TestSetup {
             .spawn()
             .expect("spawn language server")
             .0;
-        let pid = child.id().expect("child id");
-
         let service = ().serve(child).await.expect("service start");
 
         Self {
@@ -125,7 +121,6 @@ impl TestSetup {
             intercept_io_dir,
             cwd,
             service: Some(service),
-            pid,
             normalize_paths: true,
         }
     }
@@ -216,23 +211,10 @@ impl TestSetup {
     }
 
     pub(crate) async fn shutdown(mut self) {
-        use nix::{
-            sys::signal::{Signal, kill},
-            unistd::Pid,
-        };
-
         // take service service BEFORE potentially panicking
         let service = self.service.take().expect("not shut down yet");
 
-        // there is no way to cleanly shutdown the server using the Rust MCP SDK yet, see https://github.com/modelcontextprotocol/rust-sdk/issues/347
-        let pid = Pid::from_raw(self.pid.try_into().expect("valid pid"));
-        tokio::task::spawn_blocking(move || {
-            kill(pid, Signal::SIGTERM).expect("can send signal");
-        })
-        .await
-        .expect("spawn blocking");
-
-        service.waiting().await.expect("wait for service to exit");
+        service.cancel().await.expect("shut down service");
     }
 }
 
