@@ -1,8 +1,7 @@
-use std::{io::ErrorKind, path::Path, sync::Arc};
+use std::{io::ErrorKind, ops::Deref, path::Path, sync::Arc};
 
 use anyhow::Context;
 use error::{OptionExt, ResultExt};
-use itertools::Itertools;
 use lsp_client::LspClient;
 use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, HoverContents, HoverParams,
@@ -16,17 +15,20 @@ use lsp_types::{
     },
 };
 use rmcp::{
-    RoleServer, ServerHandler,
+    Json, RoleServer, ServerHandler,
     handler::server::{
         tool::{ToolCallContext, ToolRouter},
         wrapper::Parameters,
     },
     model::{
-        CallToolRequestParams, CallToolResult, Content, ErrorData as McpError, Implementation,
+        CallToolRequestParams, CallToolResult, ErrorData as McpError, Implementation,
         ListToolsResult, PaginatedRequestParams, ProgressNotificationParam, ServerCapabilities,
         ServerInfo,
     },
-    schemars,
+    schemars::{
+        self, Schema,
+        transform::{RestrictFormats, Transform},
+    },
     service::RequestContext,
     tool, tool_router,
 };
@@ -143,12 +145,7 @@ impl CodeExplorer {
                     .map(|tags| tags.contains(&SymbolTag::DEPRECATED))
                     .unwrap_or_default();
 
-                let McpLocation {
-                    file,
-                    line,
-                    character,
-                    workspace: _,
-                } = match McpLocation::try_new(
+                let location = match McpLocation::try_new(
                     location.clone(),
                     Arc::clone(&self.workspace),
                     workspace_and_dependencies,
@@ -166,9 +163,7 @@ impl CodeExplorer {
                     name: name.to_owned(),
                     kind,
                     deprecated,
-                    file,
-                    line,
-                    character,
+                    location,
                 }))
             })
             .filter_map(Result::transpose)
@@ -185,25 +180,14 @@ impl CodeExplorer {
         path: &str,
         client: &LspClient,
         workspace_and_dependencies: bool,
-    ) -> Result<Option<String>, McpError> {
+    ) -> Result<Option<SymbolInfo>, McpError> {
         let location = token.mcp_location(path.to_owned(), Arc::clone(&self.workspace));
 
         let modifiers = token
             .token_modifiers()
             .iter()
             .map(|m| m.to_string())
-            .join(", ");
-        let modifiers = if modifiers.is_empty() {
-            "none".to_owned()
-        } else {
-            modifiers
-        };
-
-        let mut sections = vec![format!(
-            "Token:\n\n- location: {location}\n- type: {}\n- modifiers: {}",
-            token.token_type(),
-            modifiers,
-        )];
+            .collect::<Vec<_>>();
 
         let text_document_position_params = TextDocumentPositionParams::try_from(&location)
             .context("create text document position params")
@@ -220,18 +204,22 @@ impl CodeExplorer {
             return Ok(None);
         };
 
-        sections.extend(match resp.contents {
-            HoverContents::Scalar(markup_string) => {
-                vec![format_marked_string(markup_string)]
+        let hover = match resp.contents {
+            HoverContents::Scalar(markup_string) => vec![HoverInfo::from(markup_string)],
+            HoverContents::Array(marked_strings) => {
+                marked_strings.into_iter().map(HoverInfo::from).collect()
             }
-            HoverContents::Array(marked_strings) => marked_strings
-                .into_iter()
-                .map(format_marked_string)
-                .collect(),
-            HoverContents::Markup(markup_content) => vec![markup_content.value.trim().to_owned()],
-        });
+            HoverContents::Markup(markup_content) => {
+                parse_markdown_code_blocks(&markup_content.value).unwrap_or_else(|| {
+                    vec![HoverInfo {
+                        language: None,
+                        value: markup_content.value.trim().to_owned(),
+                    }]
+                })
+            }
+        };
 
-        if let Some(resp) = client
+        let declarations = match client
             .send_request::<GotoDeclaration>(GotoDeclarationParams {
                 text_document_position_params: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
@@ -241,16 +229,14 @@ impl CodeExplorer {
             .context("GotoDeclaration")
             .internal()?
         {
-            sections.push(format!(
-                "Declarations:\n{}",
-                LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
-                    .context("format location variants")
-                    .internal()?
-            ))
-        }
+            Some(resp) => LocationVariants::from(resp)
+                .into_mcp_location(Arc::clone(&self.workspace), workspace_and_dependencies)
+                .context("convert declaration locations")
+                .internal()?,
+            None => vec![],
+        };
 
-        if let Some(resp) = client
+        let definitions = match client
             .send_request::<GotoDefinition>(GotoDefinitionParams {
                 text_document_position_params: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
@@ -260,16 +246,14 @@ impl CodeExplorer {
             .context("GotoDefinition")
             .internal()?
         {
-            sections.push(format!(
-                "Definitions:\n{}",
-                LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
-                    .context("format location variants")
-                    .internal()?
-            ))
-        }
+            Some(resp) => LocationVariants::from(resp)
+                .into_mcp_location(Arc::clone(&self.workspace), workspace_and_dependencies)
+                .context("convert definition locations")
+                .internal()?,
+            None => vec![],
+        };
 
-        if let Some(resp) = client
+        let implementations = match client
             .send_request::<GotoImplementation>(GotoImplementationParams {
                 text_document_position_params: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
@@ -279,16 +263,14 @@ impl CodeExplorer {
             .context("GotoImplementation")
             .internal()?
         {
-            sections.push(format!(
-                "Implementations:\n{}",
-                LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
-                    .context("format location variants")
-                    .internal()?
-            ))
-        }
+            Some(resp) => LocationVariants::from(resp)
+                .into_mcp_location(Arc::clone(&self.workspace), workspace_and_dependencies)
+                .context("convert implementation locations")
+                .internal()?,
+            None => vec![],
+        };
 
-        if let Some(resp) = client
+        let type_definitions = match client
             .send_request::<GotoTypeDefinition>(GotoTypeDefinitionParams {
                 text_document_position_params: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
@@ -298,16 +280,14 @@ impl CodeExplorer {
             .context("GotoTypeDefinition")
             .internal()?
         {
-            sections.push(format!(
-                "Type Definitions:\n{}",
-                LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
-                    .context("format location variants")
-                    .internal()?
-            ))
-        }
+            Some(resp) => LocationVariants::from(resp)
+                .into_mcp_location(Arc::clone(&self.workspace), workspace_and_dependencies)
+                .context("convert type definition locations")
+                .internal()?,
+            None => vec![],
+        };
 
-        if let Some(locations) = client
+        let references = match client
             .send_request::<References>(ReferenceParams {
                 text_document_position: text_document_position_params.clone(),
                 work_done_progress_params: Default::default(),
@@ -320,28 +300,35 @@ impl CodeExplorer {
             .context("References")
             .internal()?
         {
-            let locations = locations
+            Some(locations) => locations
                 .into_iter()
-                .filter_map(|loc| {
+                .map(|loc| {
                     McpLocation::try_new(
                         loc,
                         Arc::clone(&self.workspace),
                         workspace_and_dependencies,
                     )
-                    .ok()
-                    .flatten()
                 })
-                .map(|loc| format!("- {loc}"))
-                .collect::<Vec<_>>();
-            let locations = if locations.is_empty() {
-                "None".to_owned()
-            } else {
-                locations.join("\n")
-            };
-            sections.push(format!("References:\n{locations}"));
-        }
+                .filter_map(Result::transpose)
+                .collect::<Result<Vec<_>, _>>()
+                .context("format references")
+                .internal()?,
+            None => vec![],
+        };
 
-        Ok(Some(sections.join("\n\n---\n\n")))
+        Ok(Some(SymbolInfo {
+            token: TokenInfo {
+                location,
+                token_type: token.token_type().to_string(),
+                modifiers,
+            },
+            hover,
+            declarations,
+            definitions,
+            implementations,
+            type_definitions,
+            references,
+        }))
     }
 }
 
@@ -359,7 +346,7 @@ impl CodeExplorer {
             workspace_and_dependencies: workspace_and_dependencies_orig,
         }): Parameters<FindSymbolRequest>,
         ctx: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<FindSymbolResult>, McpError> {
         let client = self.wait_for_client(ctx).await;
 
         let query = empty_string_to_none(query);
@@ -371,9 +358,10 @@ impl CodeExplorer {
             Some(file) => {
                 // LSP may error for non-existing files, so try to read it first
                 let Some(file_content) = self.read_file(&file).await? else {
-                    return Ok(CallToolResult::error(vec![Content::text(format!(
-                        "file not found: {file}"
-                    ))]));
+                    return Err(McpError::invalid_params(
+                        format!("file not found: {file}"),
+                        None,
+                    ));
                 };
 
                 let resp = client
@@ -485,7 +473,7 @@ impl CodeExplorer {
 
                 let Some(resp) = resp else {
                     // no symbols
-                    return Ok(CallToolResult::success(vec![]));
+                    return Ok(Json(FindSymbolResult { symbols: vec![] }));
                 };
 
                 match resp {
@@ -520,11 +508,7 @@ impl CodeExplorer {
                 true,
             )?;
         }
-        let results = results
-            .into_iter()
-            .map(Content::json)
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(CallToolResult::success(results))
+        Ok(Json(FindSymbolResult { symbols: results }))
     }
 
     #[tool(
@@ -540,7 +524,7 @@ impl CodeExplorer {
             workspace_and_dependencies,
         }): Parameters<SymbolInfoRequest>,
         ctx: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<SymbolInfoResult>, McpError> {
         let client = self.wait_for_client(ctx).await;
 
         let workspace_and_dependencies = workspace_and_dependencies.unwrap_or_default();
@@ -548,9 +532,10 @@ impl CodeExplorer {
         let file_content = match self.read_file(&file).await? {
             Some(s) => s,
             None => {
-                return Ok(CallToolResult::error(vec![Content::text(format!(
-                    "file not found: {file}"
-                ))]));
+                return Err(McpError::invalid_params(
+                    format!("file not found: {file}"),
+                    None,
+                ));
             }
         };
         let resp = client
@@ -587,32 +572,33 @@ impl CodeExplorer {
             else {
                 continue;
             };
-            results.push(Content::text(res));
+            results.push(res);
         }
 
-        Ok(CallToolResult::success(results))
+        Ok(Json(SymbolInfoResult { info: results }))
     }
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 struct FindSymbolRequest {
-    #[schemars(
-        description = "the symbol that you are looking for, required if `path` is not provided",
-        length(min = 1)
-    )]
+    /// the symbol that you are looking for, required if `path` is not provided
+    #[schemars(length(min = 1))]
     query: Option<String>,
 
-    #[schemars(
-        description = "path to the file, otherwise search the entire workspace",
-        length(min = 1)
-    )]
+    /// path to the file, otherwise search the entire workspace
+    #[schemars(length(min = 1))]
     file: Option<String>,
 
-    #[schemars(description = "search fuzzy")]
+    /// search fuzzy
     fuzzy: Option<bool>,
 
-    #[schemars(description = "search workspace and dependencies")]
+    /// search workspace and dependencies
     workspace_and_dependencies: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct FindSymbolResult {
+    symbols: Vec<SymbolResult>,
 }
 
 #[derive(Debug, PartialEq, Eq, serde::Serialize, schemars::JsonSchema)]
@@ -620,9 +606,7 @@ struct SymbolResult {
     name: String,
     kind: String,
     deprecated: bool,
-    file: String,
-    line: u32,
-    character: u32,
+    location: McpLocation,
 }
 
 impl PartialOrd for SymbolResult {
@@ -633,43 +617,96 @@ impl PartialOrd for SymbolResult {
 
 impl Ord for SymbolResult {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.file
-            .cmp(&other.file)
-            .then_with(|| self.line.cmp(&other.line))
-            .then_with(|| self.character.cmp(&other.character))
+        self.location
+            .cmp(&other.location)
             .then_with(|| self.name.cmp(&other.name))
             .then_with(|| self.kind.cmp(&other.kind))
     }
 }
 
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct SymbolInfoResult {
+    info: Vec<SymbolInfo>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct SymbolInfo {
+    token: TokenInfo,
+    hover: Vec<HoverInfo>,
+    declarations: Vec<McpLocation>,
+    definitions: Vec<McpLocation>,
+    implementations: Vec<McpLocation>,
+    type_definitions: Vec<McpLocation>,
+    references: Vec<McpLocation>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct TokenInfo {
+    location: McpLocation,
+    token_type: String,
+    modifiers: Vec<String>,
+}
+
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 struct SymbolInfoRequest {
-    #[schemars(description = "path to the file, can be absolute or relative")]
+    /// path to the file, can be absolute or relative
     file: String,
 
-    #[schemars(description = "symbol name")]
+    /// symbol name
     name: String,
 
-    #[schemars(description = "1-based line number within the file", range(min = 1))]
+    /// 1-based line number within the file
+    #[schemars(range(min = 1))]
     line: Option<u32>,
 
-    #[schemars(
-        description = "1-based character index within the line",
-        range(min = 1)
-    )]
+    /// 1-based character index within the line
+    #[schemars(range(min = 1))]
     character: Option<u32>,
 
-    #[schemars(description = "search workspace and dependencies")]
+    /// search workspace and dependencies
     workspace_and_dependencies: Option<bool>,
 }
 
-fn format_marked_string(s: MarkedString) -> String {
-    match s {
-        MarkedString::String(s) => s.trim().to_owned(),
-        MarkedString::LanguageString(LanguageString { language, value }) => {
-            format!("```{language}\n{value}\n```\n")
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct HoverInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
+    value: String,
+}
+
+impl From<MarkedString> for HoverInfo {
+    fn from(s: MarkedString) -> Self {
+        match s {
+            MarkedString::String(value) => parse_markdown_code_blocks(&value)
+                .and_then(|mut blocks| (blocks.len() == 1).then(|| blocks.remove(0)))
+                .unwrap_or_else(|| Self {
+                    language: None,
+                    value: value.trim().to_owned(),
+                }),
+            MarkedString::LanguageString(LanguageString { language, value }) => Self {
+                language: Some(language),
+                value,
+            },
         }
     }
+}
+
+fn parse_markdown_code_blocks(value: &str) -> Option<Vec<HoverInfo>> {
+    let mut rest = value.trim();
+    let mut blocks = Vec::new();
+
+    while !rest.is_empty() {
+        let body = rest.strip_prefix("```")?;
+        let (language, body) = body.split_once('\n')?;
+        let (body, remaining) = body.split_once("```")?;
+        blocks.push(HoverInfo {
+            language: (!language.is_empty()).then(|| language.to_owned()),
+            value: body.trim_end().to_owned(),
+        });
+        rest = remaining.trim();
+    }
+
+    (!blocks.is_empty()).then_some(blocks)
 }
 
 fn empty_string_to_none(s: Option<String>) -> Option<String> {
@@ -707,6 +744,41 @@ impl ServerHandler for CodeExplorer {
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
         let items = self.tool_router.list_all();
+
+        // Workaround because some MCP users complain about non-standard formats.
+        //
+        // See <https://github.com/GREsau/schemars/pull/405>, but that's not used by [`rmcp`].
+        let items = items
+            .into_iter()
+            .map(|mut tool| {
+                let mut input_schema: Schema = tool.input_schema.deref().clone().into();
+                RestrictFormats::default().transform(&mut input_schema);
+                tool.input_schema = Arc::new(
+                    input_schema
+                        .as_object()
+                        .expect("schema should be an object")
+                        .clone(),
+                );
+
+                let mut output_schema: Schema = tool
+                    .output_schema
+                    .as_ref()
+                    .expect("output schema set")
+                    .deref()
+                    .clone()
+                    .into();
+                RestrictFormats::default().transform(&mut output_schema);
+                tool.output_schema = Some(Arc::new(
+                    output_schema
+                        .as_object()
+                        .expect("schema should be an object")
+                        .clone(),
+                ));
+
+                tool
+            })
+            .collect();
+
         Ok(ListToolsResult::with_all_items(items))
     }
 }

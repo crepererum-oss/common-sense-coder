@@ -3,11 +3,10 @@ use std::{ops::Deref, path::Path, process::Stdio};
 use assert_cmd::{cargo::cargo_bin, pkg_name};
 use rmcp::{
     RoleClient,
-    model::{CallToolRequestParams, JsonObject, RawContent},
-    service::{RunningService, ServiceExt},
+    model::{CallToolRequestParams, JsonObject, Tool},
+    service::{RunningService, ServiceError, ServiceExt},
     transport::TokioChildProcess,
 };
-use serde::Serialize;
 use serde_json::Value;
 use tempfile::TempDir;
 use tokio::process::Command;
@@ -130,40 +129,37 @@ impl TestSetup {
         self
     }
 
-    async fn call_tool(
-        &self,
-        params: CallToolRequestParams,
-    ) -> Result<Vec<TextOrJson>, Vec<TextOrJson>> {
-        let resp = self
+    pub(crate) async fn list_all_tools(&self) -> Vec<Tool> {
+        self.service
+            .as_ref()
+            .expect("not shut down")
+            .list_all_tools()
+            .await
+            .expect("can list tools")
+    }
+
+    async fn call_tool(&self, params: CallToolRequestParams) -> Result<Value, Value> {
+        let resp = match self
             .service
             .as_ref()
             .expect("not shut down")
             .call_tool(params)
             .await
-            .expect("call tool");
+        {
+            Ok(resp) => resp,
+            Err(ServiceError::McpError(error)) => {
+                return Err(serde_json::to_value(error).expect("serialize MCP error"));
+            }
+            Err(error) => panic!("call tool: {error}"),
+        };
 
-        let data = resp
-            .content
-            .into_iter()
-            .map(|annotated| match annotated.raw {
-                RawContent::Text(raw_text_content) => {
-                    let s = raw_text_content.text;
-                    let s = if self.normalize_paths {
-                        s.replace(&self.fixtures_path, "/fixtures")
-                    } else {
-                        s
-                    };
+        let mut data = resp
+            .structured_content
+            .expect("tool result should always have structured content");
 
-                    TextOrJson::from(s)
-                }
-                RawContent::Image(_) => unimplemented!("image content not supported"),
-                RawContent::Resource(_) => unimplemented!("resource content not supported"),
-                RawContent::ResourceLink(_) => {
-                    unimplemented!("resource link content not supported")
-                }
-                RawContent::Audio(_) => unimplemented!("audio content not supported"),
-            })
-            .collect();
+        if self.normalize_paths {
+            data = normalize_paths(data, &self.fixtures_path);
+        }
 
         if resp.is_error.unwrap_or_default() {
             Err(data)
@@ -172,38 +168,23 @@ impl TestSetup {
         }
     }
 
-    pub(crate) async fn find_symbol(
-        &self,
-        args: JsonObject,
-    ) -> Result<Vec<TextOrJson>, Vec<TextOrJson>> {
+    pub(crate) async fn find_symbol(&self, args: JsonObject) -> Result<Value, Value> {
         self.call_tool(CallToolRequestParams::new("find_symbol").with_arguments(args))
             .await
     }
 
-    pub(crate) async fn find_symbol_ok(&self, args: JsonObject) -> Vec<TextOrJson> {
+    pub(crate) async fn find_symbol_ok(&self, args: JsonObject) -> Value {
         self.find_symbol(args).await.expect("no error")
     }
 
-    pub(crate) async fn symbol_info(&self, args: JsonObject) -> Result<Vec<String>, Vec<String>> {
-        let map_data = |data: Vec<TextOrJson>| {
-            data.into_iter()
-                .map(|res| match res {
-                    TextOrJson::Text { text } => text,
-                    TextOrJson::Json(_) => panic!("expected non-JSON content"),
-                })
-                .collect()
-        };
-
+    pub(crate) async fn symbol_info(&self, args: JsonObject) -> Result<Value, Value> {
         self.call_tool(CallToolRequestParams::new("symbol_info").with_arguments(args))
             .await
-            .map(map_data)
-            .map_err(map_data)
     }
 
-    pub(crate) async fn symbol_info_ok(&self, args: JsonObject) -> Vec<String> {
+    pub(crate) async fn symbol_info_ok(&self, args: JsonObject) -> Value {
         self.symbol_info(args).await.expect("no error")
     }
-
     pub(crate) async fn shutdown(mut self) {
         // take service service BEFORE potentially panicking
         let service = self.service.take().expect("not shut down yet");
@@ -222,19 +203,21 @@ impl Drop for TestSetup {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub(crate) enum TextOrJson {
-    Text { text: String },
-    Json(JsonObject),
-}
-
-impl From<String> for TextOrJson {
-    fn from(s: String) -> Self {
-        match serde_json::from_str::<JsonObject>(&s) {
-            Ok(obj) => Self::Json(obj),
-            Err(_) => Self::Text { text: s },
-        }
+fn normalize_paths(value: Value, fixtures_path: &str) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(|item| normalize_paths(item, fixtures_path))
+                .collect(),
+        ),
+        Value::Object(obj) => Value::Object(
+            obj.into_iter()
+                .map(|(key, value)| (key, normalize_paths(value, fixtures_path)))
+                .collect(),
+        ),
+        Value::String(text) => Value::String(text.replace(fixtures_path, "/fixtures")),
+        value => value,
     }
 }
 
