@@ -250,7 +250,6 @@ dependencies = [
  "itertools",
  "lsp-client",
  "lsp-types",
- "nix 0.31.3",
  "predicates",
  "rmcp",
  "serde",
@@ -737,18 +736,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nix"
-version = "0.31.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
-dependencies = [
- "bitflags 2.9.1",
- "cfg-if",
- "cfg_aliases",
- "libc",
-]
-
-[[package]]
 name = "normalize-line-endings"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -863,7 +850,7 @@ checksum = "a3ef4f2f0422f23a82ec9f628ea2acd12871c81a9362b02c43c1aa86acfc3ba1"
 dependencies = [
  "futures",
  "indexmap",
- "nix 0.30.1",
+ "nix",
  "tokio",
  "tracing",
  "windows",

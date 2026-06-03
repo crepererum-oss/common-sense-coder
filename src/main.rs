@@ -27,8 +27,6 @@ use assert_cmd as _;
 #[cfg(test)]
 use insta as _;
 #[cfg(test)]
-use nix as _;
-#[cfg(test)]
 use predicates as _;
 #[cfg(test)]
 use tempfile as _;

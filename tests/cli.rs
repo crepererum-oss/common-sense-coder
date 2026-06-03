@@ -7,7 +7,6 @@ use insta as _;
 use itertools as _;
 use lsp_client as _;
 use lsp_types as _;
-use nix as _;
 use rmcp as _;
 use serde as _;
 use serde_json as _;
