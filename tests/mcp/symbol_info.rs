@@ -181,7 +181,7 @@ async fn test_info_for_all_in_file() {
       file: src/lib.rs
       name: accu
       line: 15
-      char: 5
+      char: 9
 
     ---
 
@@ -228,7 +228,7 @@ async fn test_info_for_all_in_file() {
       file: src/lib.rs
       name: accu
       line: 16
-      char: 5
+      char: 9
 
     ---
 
@@ -275,7 +275,7 @@ async fn test_info_for_all_in_file() {
       file: src/lib.rs
       name: accu
       line: 17
-      char: 5
+      char: 9
 
     ---
 
@@ -322,7 +322,7 @@ async fn test_info_for_all_in_file() {
       file: src/lib.rs
       name: accu
       line: 18
-      char: 5
+      char: 9
 
     ---
 
@@ -547,7 +547,7 @@ async fn test_info_for_all_in_file() {
     ```
 
     ```rust
-    struct MyMainStruct {
+    pub(crate) struct MyMainStruct {
         pub field: u64,
     }
     ```

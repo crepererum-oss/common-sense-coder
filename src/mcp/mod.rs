@@ -6,9 +6,9 @@ use itertools::Itertools;
 use lsp_client::LspClient;
 use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, HoverContents, HoverParams,
-    LanguageString, MarkedString, ReferenceContext, ReferenceParams, SemanticTokensParams,
-    SymbolInformation, SymbolTag, TextDocumentIdentifier, TextDocumentPositionParams,
-    WorkspaceSymbolParams, WorkspaceSymbolResponse,
+    LanguageString, Location, MarkedString, Range, ReferenceContext, ReferenceParams,
+    SemanticTokensParams, SymbolInformation, SymbolKind, SymbolTag, TextDocumentIdentifier,
+    TextDocumentPositionParams, WorkspaceSymbolParams, WorkspaceSymbolResponse,
     request::{
         DocumentSymbolRequest, GotoDeclaration, GotoDeclarationParams, GotoDefinition,
         GotoImplementation, GotoImplementationParams, GotoTypeDefinition, GotoTypeDefinitionParams,
@@ -133,14 +133,11 @@ impl CodeExplorer {
         let symbol_informations = match file {
             Some(file) => {
                 // LSP may error for non-existing files, so try to read it first
-                match self.read_file(&file).await? {
-                    Some(_) => {}
-                    None => {
-                        return Ok(CallToolResult::error(vec![Content::text(format!(
-                            "file not found: {file}"
-                        ))]));
-                    }
-                }
+                let Some(file_content) = self.read_file(&file).await? else {
+                    return Ok(CallToolResult::error(vec![Content::text(format!(
+                        "file not found: {file}"
+                    ))]));
+                };
 
                 let resp = client
                     .send_request::<DocumentSymbolRequest>(DocumentSymbolParams {
@@ -156,20 +153,66 @@ impl CodeExplorer {
                     .context("DocumentSymbolRequest")
                     .internal()?;
 
-                let Some(resp) = resp else {
-                    // no symbols
-                    return Ok(CallToolResult::success(vec![]));
-                };
-
-                match resp {
-                    DocumentSymbolResponse::Flat(symbol_informations) => symbol_informations,
-                    DocumentSymbolResponse::Nested(_) => {
+                let mut symbol_informations = match resp {
+                    None => {
+                        // no symbols
+                        vec![]
+                    }
+                    Some(DocumentSymbolResponse::Flat(symbol_informations)) => symbol_informations,
+                    Some(DocumentSymbolResponse::Nested(_)) => {
                         return Err(McpError::internal_error(
                             "nested symbols are not yet implemented",
                             None,
                         ));
                     }
+                };
+
+                // variable declarations are not part of the symbol index, hence we need to fetch them manually
+                let resp = client
+                    .send_request::<SemanticTokensFullRequest>(SemanticTokensParams {
+                        text_document: path_to_text_document_identifier(&self.workspace, &file)
+                            .context("convert path to text document identifier")
+                            .internal()?,
+                        work_done_progress_params: Default::default(),
+                        partial_result_params: Default::default(),
+                    })
+                    .await
+                    .context("SemanticTokensFullRequest")
+                    .internal()?;
+
+                if let Some(lsp_types::SemanticTokensResult::Tokens(semantic_tokens)) = resp {
+                    let doc = self
+                        .token_legend
+                        .decode(&file_content, semantic_tokens.data)
+                        .context("decode semantic tokens")
+                        .internal()?;
+
+                    for token in doc.declared_variables() {
+                        let location = Location {
+                            uri: path_to_uri(&self.workspace, &file)
+                                .context("convert path to URI")
+                                .internal()?,
+                            range: Range {
+                                // in the then we just care about the position, so set both values to it
+                                start: token.lsp_position(),
+                                end: token.lsp_position(),
+                            },
+                        };
+
+                        #[expect(deprecated, reason = "lsp-types still requires this field")]
+                        let symbol_information = SymbolInformation {
+                            name: token.data().to_owned(),
+                            kind: SymbolKind::VARIABLE,
+                            tags: token.is_deprecated().then_some(vec![SymbolTag::DEPRECATED]),
+                            deprecated: None,
+                            location,
+                            container_name: None,
+                        };
+                        symbol_informations.push(symbol_information);
+                    }
                 }
+
+                symbol_informations
             }
             None => {
                 let query = query.as_ref().required("query".to_string())?;
@@ -259,7 +302,7 @@ impl CodeExplorer {
             // rust-analyzer search is fuzzy by default
             .filter(|si| {
                 query
-                    .map(|query| (mode.check(query, &si.name)))
+                    .map(|query| mode.check(query, &si.name))
                     .unwrap_or(true)
             })
             .map(|si| {
@@ -387,7 +430,7 @@ impl CodeExplorer {
         client: &LspClient,
         workspace_and_dependencies: bool,
     ) -> Result<Option<String>, McpError> {
-        let location = token.location(path.to_owned(), Arc::clone(&self.workspace));
+        let location = token.mcp_location(path.to_owned(), Arc::clone(&self.workspace));
 
         let modifiers = token
             .token_modifiers()

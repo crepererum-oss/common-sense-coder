@@ -404,7 +404,7 @@ async fn test_file() {
         "deprecated": false,
         "file": "src/lib.rs",
         "line": 15,
-        "character": 5
+        "character": 9
       },
       {
         "type": "json",
@@ -413,7 +413,7 @@ async fn test_file() {
         "deprecated": false,
         "file": "src/lib.rs",
         "line": 16,
-        "character": 5
+        "character": 9
       },
       {
         "type": "json",
@@ -422,7 +422,7 @@ async fn test_file() {
         "deprecated": false,
         "file": "src/lib.rs",
         "line": 17,
-        "character": 5
+        "character": 9
       },
       {
         "type": "json",
@@ -431,7 +431,7 @@ async fn test_file() {
         "deprecated": false,
         "file": "src/lib.rs",
         "line": 18,
-        "character": 5
+        "character": 9
       },
       {
         "type": "json",

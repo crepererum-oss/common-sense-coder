@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use lsp_types::{SemanticToken, SemanticTokensLegend};
+use lsp_types::{Position, SemanticToken, SemanticTokensLegend};
 
 use crate::ProgrammingLanguageQuirks;
 
@@ -103,6 +103,12 @@ pub(crate) struct Document<'legend> {
 }
 
 impl<'legend> Document<'legend> {
+    pub(crate) fn declared_variables(&self) -> impl Iterator<Item = &Token<'legend>> {
+        self.tokens
+            .iter()
+            .filter(|token| token.token_type().as_ref() == "variable" && token.is_declaration())
+    }
+
     pub(crate) fn query(
         &self,
         name: &str,
@@ -141,12 +147,36 @@ pub(crate) struct Token<'a> {
 }
 
 impl Token<'_> {
-    pub(crate) fn location(&self, file: String, workspace: Arc<Path>) -> McpLocation {
+    pub(crate) fn data(&self) -> &str {
+        self.data
+    }
+
+    pub(crate) fn is_declaration(&self) -> bool {
+        self.token_modifiers
+            .iter()
+            .any(|modifier| modifier.name == "declaration")
+    }
+
+    pub(crate) fn is_deprecated(&self) -> bool {
+        self.token_modifiers
+            .iter()
+            .any(|modifier| modifier.name == "deprecated")
+    }
+
+    pub(crate) fn mcp_location(&self, file: String, workspace: Arc<Path>) -> McpLocation {
         McpLocation {
             file,
             line: self.line,
             character: self.character,
             workspace,
+        }
+    }
+
+    pub(crate) fn lsp_position(&self) -> Position {
+        // 1-based => 0-based
+        Position {
+            line: self.line - 1,
+            character: self.character - 1,
         }
     }
 
@@ -161,6 +191,12 @@ impl Token<'_> {
 
 #[derive(Debug)]
 pub(crate) struct TokenType(String);
+
+impl AsRef<str> for TokenType {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
 
 impl std::fmt::Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
