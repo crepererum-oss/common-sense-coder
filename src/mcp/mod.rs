@@ -56,7 +56,6 @@ pub(crate) struct CodeExplorer {
     tool_router: ToolRouter<Self>,
 }
 
-#[tool_router]
 impl CodeExplorer {
     pub(crate) fn new(
         progress_guard: ProgressGuard,
@@ -110,6 +109,241 @@ impl CodeExplorer {
         }
     }
 
+    fn filter_symbol_informations(
+        &self,
+        symbol_informations: &[SymbolInformation],
+        query: Option<&str>,
+        mode: SearchMode,
+        workspace_and_dependencies: bool,
+    ) -> Result<Vec<SymbolResult>, McpError> {
+        let mut results = symbol_informations
+            .iter()
+            // rust-analyzer search is fuzzy by default
+            .filter(|si| {
+                query
+                    .map(|query| mode.check(query, &si.name))
+                    .unwrap_or(true)
+            })
+            .map(|si| {
+                let SymbolInformation {
+                    name,
+                    kind,
+                    tags,
+                    location,
+                    ..
+                } = si;
+
+                let kind = format!("{kind:?}");
+
+                let deprecated = tags
+                    .as_ref()
+                    .map(|tags| tags.contains(&SymbolTag::DEPRECATED))
+                    .unwrap_or_default();
+
+                let McpLocation {
+                    file,
+                    line,
+                    character,
+                    workspace: _,
+                } = match McpLocation::try_new(
+                    location.clone(),
+                    Arc::clone(&self.workspace),
+                    workspace_and_dependencies,
+                )
+                .context("create MCP location")
+                .internal()?
+                {
+                    Some(loc) => loc,
+                    None => {
+                        return Ok(None);
+                    }
+                };
+
+                Ok(Some(SymbolResult {
+                    name: name.to_owned(),
+                    kind,
+                    deprecated,
+                    file,
+                    line,
+                    character,
+                }))
+            })
+            .filter_map(Result::transpose)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        results.sort_unstable();
+
+        Ok(results)
+    }
+
+    async fn symbol_info_for_token(
+        &self,
+        token: &Token<'_>,
+        path: &str,
+        client: &LspClient,
+        workspace_and_dependencies: bool,
+    ) -> Result<Option<String>, McpError> {
+        let location = token.mcp_location(path.to_owned(), Arc::clone(&self.workspace));
+
+        let modifiers = token
+            .token_modifiers()
+            .iter()
+            .map(|m| m.to_string())
+            .join(", ");
+        let modifiers = if modifiers.is_empty() {
+            "none".to_owned()
+        } else {
+            modifiers
+        };
+
+        let mut sections = vec![format!(
+            "Token:\n\n- location: {location}\n- type: {}\n- modifiers: {}",
+            token.token_type(),
+            modifiers,
+        )];
+
+        let text_document_position_params = TextDocumentPositionParams::try_from(&location)
+            .context("create text document position params")
+            .internal()?;
+        let Some(resp) = client
+            .send_request::<HoverRequest>(HoverParams {
+                text_document_position_params: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+            })
+            .await
+            .context("HoverRequest")
+            .internal()?
+        else {
+            return Ok(None);
+        };
+
+        sections.extend(match resp.contents {
+            HoverContents::Scalar(markup_string) => {
+                vec![format_marked_string(markup_string)]
+            }
+            HoverContents::Array(marked_strings) => marked_strings
+                .into_iter()
+                .map(format_marked_string)
+                .collect(),
+            HoverContents::Markup(markup_content) => vec![markup_content.value.trim().to_owned()],
+        });
+
+        if let Some(resp) = client
+            .send_request::<GotoDeclaration>(GotoDeclarationParams {
+                text_document_position_params: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .context("GotoDeclaration")
+            .internal()?
+        {
+            sections.push(format!(
+                "Declarations:\n{}",
+                LocationVariants::from(resp)
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
+                    .context("format location variants")
+                    .internal()?
+            ))
+        }
+
+        if let Some(resp) = client
+            .send_request::<GotoDefinition>(GotoDefinitionParams {
+                text_document_position_params: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .context("GotoDefinition")
+            .internal()?
+        {
+            sections.push(format!(
+                "Definitions:\n{}",
+                LocationVariants::from(resp)
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
+                    .context("format location variants")
+                    .internal()?
+            ))
+        }
+
+        if let Some(resp) = client
+            .send_request::<GotoImplementation>(GotoImplementationParams {
+                text_document_position_params: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .context("GotoImplementation")
+            .internal()?
+        {
+            sections.push(format!(
+                "Implementations:\n{}",
+                LocationVariants::from(resp)
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
+                    .context("format location variants")
+                    .internal()?
+            ))
+        }
+
+        if let Some(resp) = client
+            .send_request::<GotoTypeDefinition>(GotoTypeDefinitionParams {
+                text_document_position_params: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .context("GotoTypeDefinition")
+            .internal()?
+        {
+            sections.push(format!(
+                "Type Definitions:\n{}",
+                LocationVariants::from(resp)
+                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
+                    .context("format location variants")
+                    .internal()?
+            ))
+        }
+
+        if let Some(locations) = client
+            .send_request::<References>(ReferenceParams {
+                text_document_position: text_document_position_params.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                context: ReferenceContext {
+                    include_declaration: false,
+                },
+            })
+            .await
+            .context("References")
+            .internal()?
+        {
+            let locations = locations
+                .into_iter()
+                .filter_map(|loc| {
+                    McpLocation::try_new(
+                        loc,
+                        Arc::clone(&self.workspace),
+                        workspace_and_dependencies,
+                    )
+                    .ok()
+                    .flatten()
+                })
+                .map(|loc| format!("- {loc}"))
+                .collect::<Vec<_>>();
+            let locations = if locations.is_empty() {
+                "None".to_owned()
+            } else {
+                locations.join("\n")
+            };
+            sections.push(format!("References:\n{locations}"));
+        }
+
+        Ok(Some(sections.join("\n\n---\n\n")))
+    }
+}
+
+#[tool_router]
+impl CodeExplorer {
     #[tool(
         description = "Find symbol (e.g. a struct, enum, method, ...) in code base. Use the `symbol_info` tool afterwards to learn more about the found symbols."
     )]
@@ -290,73 +524,6 @@ impl CodeExplorer {
         Ok(CallToolResult::success(results))
     }
 
-    fn filter_symbol_informations(
-        &self,
-        symbol_informations: &[SymbolInformation],
-        query: Option<&str>,
-        mode: SearchMode,
-        workspace_and_dependencies: bool,
-    ) -> Result<Vec<SymbolResult>, McpError> {
-        let mut results = symbol_informations
-            .iter()
-            // rust-analyzer search is fuzzy by default
-            .filter(|si| {
-                query
-                    .map(|query| mode.check(query, &si.name))
-                    .unwrap_or(true)
-            })
-            .map(|si| {
-                let SymbolInformation {
-                    name,
-                    kind,
-                    tags,
-                    location,
-                    ..
-                } = si;
-
-                let kind = format!("{kind:?}");
-
-                let deprecated = tags
-                    .as_ref()
-                    .map(|tags| tags.contains(&SymbolTag::DEPRECATED))
-                    .unwrap_or_default();
-
-                let McpLocation {
-                    file,
-                    line,
-                    character,
-                    workspace: _,
-                } = match McpLocation::try_new(
-                    location.clone(),
-                    Arc::clone(&self.workspace),
-                    workspace_and_dependencies,
-                )
-                .context("create MCP location")
-                .internal()?
-                {
-                    Some(loc) => loc,
-                    None => {
-                        return Ok(None);
-                    }
-                };
-
-                Ok(Some(SymbolResult {
-                    name: name.to_owned(),
-                    kind,
-                    deprecated,
-                    file,
-                    line,
-                    character,
-                }))
-            })
-            .filter_map(Result::transpose)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        results.sort_unstable();
-
-        Ok(results)
-    }
-
     #[tool(
         description = "Get detailed information about a given symbol (struct, enum, method, trait, ...) like documentation, declaration, references, usage across the code base, etc."
     )]
@@ -421,171 +588,6 @@ impl CodeExplorer {
         }
 
         Ok(CallToolResult::success(results))
-    }
-
-    async fn symbol_info_for_token(
-        &self,
-        token: &Token<'_>,
-        path: &str,
-        client: &LspClient,
-        workspace_and_dependencies: bool,
-    ) -> Result<Option<String>, McpError> {
-        let location = token.mcp_location(path.to_owned(), Arc::clone(&self.workspace));
-
-        let modifiers = token
-            .token_modifiers()
-            .iter()
-            .map(|m| m.to_string())
-            .join(", ");
-        let modifiers = if modifiers.is_empty() {
-            "none".to_owned()
-        } else {
-            modifiers
-        };
-
-        let mut sections = vec![format!(
-            "Token:\n\n- location: {location}\n- type: {}\n- modifiers: {}",
-            token.token_type(),
-            modifiers,
-        )];
-
-        let text_document_position_params = TextDocumentPositionParams::try_from(&location)
-            .context("create text document position params")
-            .internal()?;
-        let Some(resp) = client
-            .send_request::<HoverRequest>(HoverParams {
-                text_document_position_params: text_document_position_params.clone(),
-                work_done_progress_params: Default::default(),
-            })
-            .await
-            .context("HoverRequest")
-            .internal()?
-        else {
-            return Ok(None);
-        };
-
-        sections.extend(match resp.contents {
-            HoverContents::Scalar(markup_string) => {
-                vec![format_marked_string(markup_string)]
-            }
-            HoverContents::Array(marked_strings) => marked_strings
-                .into_iter()
-                .map(format_marked_string)
-                .collect(),
-            HoverContents::Markup(markup_content) => vec![markup_content.value.trim().to_owned()],
-        });
-
-        if let Some(resp) = client
-            .send_request::<GotoDeclaration>(GotoDeclarationParams {
-                text_document_position_params: text_document_position_params.clone(),
-                work_done_progress_params: Default::default(),
-                partial_result_params: Default::default(),
-            })
-            .await
-            .context("GotoDeclaration")
-            .internal()?
-        {
-            sections.push(format!(
-                "Declarations:\n{}",
-                LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
-                    .context("format location variants")
-                    .internal()?
-            ))
-        }
-
-        if let Some(resp) = client
-            .send_request::<GotoDefinition>(GotoDefinitionParams {
-                text_document_position_params: text_document_position_params.clone(),
-                work_done_progress_params: Default::default(),
-                partial_result_params: Default::default(),
-            })
-            .await
-            .context("GotoDefinition")
-            .internal()?
-        {
-            sections.push(format!(
-                "Definitions:\n{}",
-                LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
-                    .context("format location variants")
-                    .internal()?
-            ))
-        }
-
-        if let Some(resp) = client
-            .send_request::<GotoImplementation>(GotoImplementationParams {
-                text_document_position_params: text_document_position_params.clone(),
-                work_done_progress_params: Default::default(),
-                partial_result_params: Default::default(),
-            })
-            .await
-            .context("GotoImplementation")
-            .internal()?
-        {
-            sections.push(format!(
-                "Implementations:\n{}",
-                LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
-                    .context("format location variants")
-                    .internal()?
-            ))
-        }
-
-        if let Some(resp) = client
-            .send_request::<GotoTypeDefinition>(GotoTypeDefinitionParams {
-                text_document_position_params: text_document_position_params.clone(),
-                work_done_progress_params: Default::default(),
-                partial_result_params: Default::default(),
-            })
-            .await
-            .context("GotoTypeDefinition")
-            .internal()?
-        {
-            sections.push(format!(
-                "Type Definitions:\n{}",
-                LocationVariants::from(resp)
-                    .format(Arc::clone(&self.workspace), workspace_and_dependencies)
-                    .context("format location variants")
-                    .internal()?
-            ))
-        }
-
-        if let Some(locations) = client
-            .send_request::<References>(ReferenceParams {
-                text_document_position: text_document_position_params.clone(),
-                work_done_progress_params: Default::default(),
-                partial_result_params: Default::default(),
-                context: ReferenceContext {
-                    include_declaration: false,
-                },
-            })
-            .await
-            .context("References")
-            .internal()?
-        {
-            let locations = locations
-                .into_iter()
-                .filter_map(|loc| {
-                    McpLocation::try_new(
-                        loc,
-                        Arc::clone(&self.workspace),
-                        workspace_and_dependencies,
-                    )
-                    .ok()
-                    .flatten()
-                })
-                .map(|loc| format!("- {loc}"))
-                .collect::<Vec<_>>();
-            let locations = if locations.is_empty() {
-                "None".to_owned()
-            } else {
-                locations.join("\n")
-            };
-            sections.push(format!("References:\n{locations}"));
-        }
-
-        Ok(Some(sections.join("\n\n---\n\n")))
     }
 }
 
