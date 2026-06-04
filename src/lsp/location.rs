@@ -9,6 +9,7 @@ use lsp_types::{
     GotoDefinitionResponse, Location, LocationLink, Position, TextDocumentIdentifier,
     TextDocumentPositionParams, Uri,
 };
+use rmcp::schemars;
 use serde::Serialize;
 
 #[derive(Debug)]
@@ -19,60 +20,40 @@ pub(crate) enum LocationVariants {
 }
 
 impl LocationVariants {
-    pub(crate) fn format(
+    pub(crate) fn into_mcp_location(
         self,
         workspace: Arc<Path>,
         workspace_and_dependencies: bool,
-    ) -> Result<String> {
-        Ok(match self {
+    ) -> Result<Vec<McpLocation>> {
+        match self {
             Self::Scalar(location) => {
-                McpLocation::try_new(location, workspace, workspace_and_dependencies)?
-                    .map(|loc| loc.to_string())
-                    .unwrap_or_default()
+                Ok(
+                    McpLocation::try_new(location, workspace, workspace_and_dependencies)?
+                        .into_iter()
+                        .collect(),
+                )
             }
-            Self::Array(locations) => {
-                let locations = locations
-                    .into_iter()
-                    .map(|loc| {
-                        McpLocation::try_new(
-                            loc,
-                            Arc::clone(&workspace),
-                            workspace_and_dependencies,
-                        )
-                    })
-                    .filter_map(Result::transpose)
-                    .map(|res| res.map(|loc| format!("- {loc}")))
-                    .collect::<Result<Vec<_>, _>>()
-                    .context("format locations")?;
-
-                if locations.is_empty() {
-                    "None".to_owned()
-                } else {
-                    locations.join("\n")
-                }
-            }
-            Self::Link(location_links) => {
-                let locations = location_links
-                    .into_iter()
-                    .map(|loc| {
-                        McpLocation::try_new_from_location_link(
-                            loc,
-                            Arc::clone(&workspace),
-                            workspace_and_dependencies,
-                        )
-                    })
-                    .filter_map(Result::transpose)
-                    .map(|res| res.map(|loc| format!("- {loc}")))
-                    .collect::<Result<Vec<_>, _>>()
-                    .context("format locations")?;
-
-                if locations.is_empty() {
-                    "None".to_owned()
-                } else {
-                    locations.join("\n")
-                }
-            }
-        })
+            Self::Array(locations) => locations
+                .into_iter()
+                .map(|loc| {
+                    McpLocation::try_new(loc, Arc::clone(&workspace), workspace_and_dependencies)
+                })
+                .filter_map(Result::transpose)
+                .collect::<Result<Vec<_>>>()
+                .context("format locations"),
+            Self::Link(location_links) => location_links
+                .into_iter()
+                .map(|loc| {
+                    McpLocation::try_new_from_location_link(
+                        loc,
+                        Arc::clone(&workspace),
+                        workspace_and_dependencies,
+                    )
+                })
+                .filter_map(Result::transpose)
+                .collect::<Result<Vec<_>>>()
+                .context("format locations"),
+        }
     }
 }
 
@@ -86,13 +67,23 @@ impl From<GotoDefinitionResponse> for LocationVariants {
     }
 }
 
-#[derive(Debug, Serialize)]
+/// Describes a location of a symbol.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
+#[serde(rename = "Location")]
 pub(crate) struct McpLocation {
+    /// File path.
     pub(crate) file: String,
+
+    /// 1-based line number.
+    #[schemars(range(min = 1))]
     pub(crate) line: u32,
+
+    /// 1-based character.
+    #[schemars(range(min = 1))]
     pub(crate) character: u32,
 
     #[serde(skip_serializing)]
+    #[schemars(skip)]
     pub(crate) workspace: Arc<Path>,
 }
 
