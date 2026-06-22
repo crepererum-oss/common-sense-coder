@@ -9,7 +9,7 @@ anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive", "env"] }
 dotenvy = "0.15.7"
 futures = "0.3.32"
-itertools = "0.14.0"
+itertools = "0.15.0"
 lsp-client = "0.1.0"
 lsp-types = "0.97.0"
 rmcp = { version = "1.7.0", features = ["macros", "transport-io"] }
