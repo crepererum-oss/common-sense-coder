@@ -13,8 +13,6 @@ async fn test_list_tools() {
         "description": "Find symbol (e.g. a struct, enum, method, ...) in code base. Use the `symbol_info` tool afterwards to learn more about the found symbols.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "title": "FindSymbolRequest",
-          "type": "object",
           "properties": {
             "query": {
               "description": "the symbol that you are looking for, required if `path` is not provided",
@@ -46,23 +44,11 @@ async fn test_list_tools() {
                 "null"
               ]
             }
-          }
+          },
+          "type": "object"
         },
         "outputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "title": "FindSymbolResult",
-          "type": "object",
-          "properties": {
-            "symbols": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/SymbolResult"
-              }
-            }
-          },
-          "required": [
-            "symbols"
-          ],
           "$defs": {
             "SymbolResult": {
               "type": "object",
@@ -112,7 +98,19 @@ async fn test_list_tools() {
                 "character"
               ]
             }
-          }
+          },
+          "type": "object",
+          "properties": {
+            "symbols": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SymbolResult"
+              }
+            }
+          },
+          "required": [
+            "symbols"
+          ]
         }
       },
       {
@@ -120,7 +118,10 @@ async fn test_list_tools() {
         "description": "Get detailed information about a given symbol (struct, enum, method, trait, ...) like documentation, declaration, references, usage across the code base, etc.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "title": "SymbolInfoRequest",
+          "required": [
+            "file",
+            "name"
+          ],
           "type": "object",
           "properties": {
             "file": {
@@ -154,27 +155,10 @@ async fn test_list_tools() {
                 "null"
               ]
             }
-          },
-          "required": [
-            "file",
-            "name"
-          ]
+          }
         },
         "outputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "title": "SymbolInfoResult",
-          "type": "object",
-          "properties": {
-            "info": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/SymbolInfo"
-              }
-            }
-          },
-          "required": [
-            "info"
-          ],
           "$defs": {
             "SymbolInfo": {
               "type": "object",
@@ -293,7 +277,19 @@ async fn test_list_tools() {
                 "value"
               ]
             }
-          }
+          },
+          "type": "object",
+          "properties": {
+            "info": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SymbolInfo"
+              }
+            }
+          },
+          "required": [
+            "info"
+          ]
         }
       }
     ]
