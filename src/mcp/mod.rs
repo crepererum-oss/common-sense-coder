@@ -83,12 +83,10 @@ impl CodeExplorer {
 
                 while let Some(evt) = stream_evt.next().await {
                     ctx.peer
-                        .notify_progress(ProgressNotificationParam {
-                            progress_token: progress_token.clone(),
-                            progress: progress as f64,
-                            total: None,
-                            message: Some(evt),
-                        })
+                        .notify_progress(
+                            ProgressNotificationParam::new(progress_token.clone(), progress as f64)
+                                .with_message(evt),
+                        )
                         .await
                         .ok();
                     progress += 1;
