@@ -21,7 +21,7 @@ use rmcp::{
         wrapper::Parameters,
     },
     model::{
-        CallToolRequestParams, CallToolResult, ErrorData as McpError, Implementation,
+        CallToolRequestParams, CallToolResponse, ErrorData as McpError, Implementation,
         ListToolsResult, PaginatedRequestParams, ProgressNotificationParam, ServerCapabilities,
         ServerInfo,
     },
@@ -730,7 +730,7 @@ impl ServerHandler for CodeExplorer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<CallToolResponse, McpError> {
         info!(name = request.name.as_ref(), "call tool");
         let tcc = ToolCallContext::new(self, request, context);
         self.tool_router.call(tcc).await
