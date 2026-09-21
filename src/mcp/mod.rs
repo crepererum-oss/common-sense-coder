@@ -23,7 +23,7 @@ use rmcp::{
     model::{
         CallToolRequestParams, CallToolResponse, ErrorData as McpError, Implementation,
         ListToolsResult, PaginatedRequestParams, ProgressNotificationParam, ServerCapabilities,
-        ServerInfo,
+        ServerConfig,
     },
     schemars::{
         self, Schema,
@@ -712,8 +712,8 @@ fn empty_string_to_none(s: Option<String>) -> Option<String> {
 }
 
 impl ServerHandler for CodeExplorer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new(NAME, VERSION_STRING))
             .with_instructions("\
                 This server helps you to understand a code base.\
